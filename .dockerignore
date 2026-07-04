@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+Dockerfile
+docker-compose.yml
+.dockerignore
+README.md
+coverage
+*.tsbuildinfo
+npm-debug.log*
+pnpm-debug.log*

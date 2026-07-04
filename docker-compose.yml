@@ -1,0 +1,74 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Stack local / base para migrar a VPS. En el MVP deployamos en Vercel; esto
+# queda listo para Docker Compose + Caddy en prod.
+#
+# Flujo: db (Postgres) → migrate (one-shot: crea rol app_user + tablas + RLS)
+#        → app (Next.js standalone, corre como app_user).
+#
+# Secretos: se toman de .env (BETTER_AUTH_SECRET, MP_TOKEN_ENC_KEY). NUNCA
+# hardcodear valores reales acá.
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+  db:
+    image: postgres:17.2-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: canchas
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d canchas"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # No exponemos el puerto en prod; para dev local descomentá:
+    ports:
+      - "5432:5432"
+    networks:
+      - internal
+
+  migrate:
+    build:
+      context: .
+      target: migrator
+    environment:
+      # admin (DDL/roles/RLS)
+      DATABASE_URL: postgres://postgres:postgres@db:5432/canchas
+      # runtime (lo crea esta misma migración)
+      APP_DATABASE_URL: postgres://app_user:app_user_password@db:5432/canchas
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+
+  app:
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      # En runtime la app SOLO usa APP_DATABASE_URL (rol app_user, respeta RLS).
+      # DATABASE_URL se setea porque env.ts lo valida, pero la app no lo usa.
+      DATABASE_URL: postgres://postgres:postgres@db:5432/canchas
+      APP_DATABASE_URL: postgres://app_user:app_user_password@db:5432/canchas
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET en .env}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      MP_TOKEN_ENC_KEY: ${MP_TOKEN_ENC_KEY:?set MP_TOKEN_ENC_KEY en .env}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "3000:3000"
+    networks:
+      - internal
+
+volumes:
+  db_data:
+
+networks:
+  internal:
+    driver: bridge

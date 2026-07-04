@@ -1,0 +1,19 @@
+# Settings de pnpm (pnpm 11 movió esta config acá desde package.json).
+# Decidimos explícitamente qué dependencias pueden correr build scripts
+# (postinstall). Las de testcontainers (cpu-features/ssh2/protobufjs) son
+# opcionales con fallback en JS y se omiten.
+allowBuilds:
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
+  cpu-features: false
+  protobufjs: false
+  ssh2: false
+
+# Overrides de seguridad: forzamos versiones parcheadas en dependencias
+# TRANSITIVAS (tooling de build/dev, no runtime). Ver `pnpm audit`.
+#  - postcss: XSS en stringify (GHSA-qx2v-qp2m-jg93) — llega vía next (build).
+#  - esbuild: integridad de binario / dev-server (GHSA-67mh-4wv8-2f99) — vía drizzle-kit.
+overrides:
+  postcss@<8.5.10: ">=8.5.10"
+  esbuild@<0.28.1: ">=0.28.1"

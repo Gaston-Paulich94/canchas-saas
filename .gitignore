@@ -1,0 +1,39 @@
+# dependencies
+/node_modules
+.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+
+# production
+/build
+/dist
+
+# misc
+.DS_Store
+*.pem
+.idea
+.vscode
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# secretos / entorno — NUNCA commitear valores reales
+.env
+.env.*
+!.env.example
+
+# testing
+/coverage
+
+# typescript
+*.tsbuildinfo
+
+# drizzle (los .sql versionados SÍ van; los snapshots de meta también)
+# (nada que ignorar acá por ahora)
