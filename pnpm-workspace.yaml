@@ -14,6 +14,9 @@ allowBuilds:
 # TRANSITIVAS (tooling de build/dev, no runtime). Ver `pnpm audit`.
 #  - postcss: XSS en stringify (GHSA-qx2v-qp2m-jg93) — llega vía next (build).
 #  - esbuild: integridad de binario / dev-server (GHSA-67mh-4wv8-2f99) — vía drizzle-kit.
+#  - undici: bypass de validación de cert TLS + DoS del cliente WebSocket + header
+#    injection (GHSA-p88m-4jfj-68fv y otros) — llega vía testcontainers (solo tests).
 overrides:
   postcss@<8.5.10: ">=8.5.10"
   esbuild@<0.28.1: ">=0.28.1"
+  undici@<8.5.0: ">=8.5.0"

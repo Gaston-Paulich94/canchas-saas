@@ -15,6 +15,20 @@
       "when": 1781473095325,
       "tag": "0001_rls_policies",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783134095015,
+      "tag": "0002_open_korg",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1783134193001,
+      "tag": "0003_courts_rls",
+      "breakpoints": true
     }
   ]
 }

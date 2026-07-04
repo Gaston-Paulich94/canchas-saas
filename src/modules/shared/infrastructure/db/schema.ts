@@ -5,6 +5,7 @@ import {
   uuid,
   timestamp,
   boolean,
+  integer,
   index,
   unique,
 } from "drizzle-orm/pg-core";
@@ -172,9 +173,54 @@ export const profiles = pgTable(
   ],
 );
 
+// ── canchas (courts) ─────────────────────────────────────────────────────────
+
+export const courtSport = pgEnum("court_sport", [
+  "padel",
+  "futbol5",
+  "futbol11",
+  "tenis",
+]);
+
+export const courts = pgTable(
+  "courts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    sport: courtSport("sport").notNull(),
+    // Superficie: cemento, sintético, polvo de ladrillo, etc. Opcional.
+    surface: text("surface"),
+    // Techada.
+    indoor: boolean("indoor").notNull().default(false),
+    // Baja lógica: una cancha inactiva no se ofrece, sin romper datos históricos.
+    isActive: boolean("is_active").notNull().default(true),
+    // Precio de referencia por hora, en pesos ARS (enteros). El cobro real se
+    // define en la fase de pagos (Mercado Pago); acá es solo informativo.
+    pricePerHour: integer("price_per_hour"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    // No dos canchas con el mismo nombre dentro de un mismo complejo.
+    unique("courts_tenant_name_unique").on(t.tenantId, t.name),
+    index("courts_tenant_id_idx").on(t.tenantId),
+  ],
+);
+
 // Tipos inferidos para uso en la app.
 export type Tenant = typeof tenants.$inferSelect;
 export type NewTenant = typeof tenants.$inferInsert;
 export type Profile = typeof profiles.$inferSelect;
 export type NewProfile = typeof profiles.$inferInsert;
 export type ProfileRole = (typeof profileRole.enumValues)[number];
+export type Court = typeof courts.$inferSelect;
+export type NewCourt = typeof courts.$inferInsert;
+export type CourtSport = (typeof courtSport.enumValues)[number];

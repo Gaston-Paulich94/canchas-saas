@@ -1,9 +1,11 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionContext } from "@/modules/auth/application/session-context";
 import { withTenant } from "@/modules/shared/infrastructure/db/with-tenant";
 import { findTenantById } from "@/modules/tenants/infrastructure/tenant.repository";
 import { logoutAction } from "@/app/actions/auth";
-import { Button } from "@/components/ui/button";
+import { ROLES } from "@/modules/auth/domain/roles";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -28,6 +30,8 @@ export default async function DashboardPage() {
     findTenantById(tx, ctx.tenantId),
   );
   if (!tenant) redirect("/login");
+
+  const canManage = ctx.role === ROLES.OWNER || ctx.role === ROLES.STAFF;
 
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 p-6">
@@ -64,8 +68,25 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
+      {canManage ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Gestión</CardTitle>
+            <CardDescription>Administración del complejo.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            <Link
+              href="/dashboard/canchas"
+              className={buttonVariants({ variant: "outline" })}
+            >
+              Canchas
+            </Link>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <p className="text-sm text-muted-foreground">
-        Próximamente: gestión de canchas, calendario y reservas.
+        Próximamente: calendario, reservas y pagos.
       </p>
     </main>
   );
