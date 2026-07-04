@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getSessionContext } from "@/modules/auth/application/session-context";
 import { ROLES } from "@/modules/auth/domain/roles";
@@ -6,6 +7,7 @@ import { getCourt } from "@/modules/courts/application/court-service";
 import { CourtNotFoundError } from "@/modules/courts/domain/court";
 import { CourtForm } from "@/components/courts/court-form";
 import { DeleteCourtButton } from "@/components/courts/delete-court-button";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -55,6 +57,20 @@ export default async function EditarCanchaPage({
             submitLabel="Guardar cambios"
             pendingLabel="Guardando…"
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Disponibilidad</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Link
+            href={`/dashboard/canchas/${court.id}/disponibilidad`}
+            className={buttonVariants({ variant: "outline" })}
+          >
+            Gestionar horarios y turnos
+          </Link>
         </CardContent>
       </Card>
 

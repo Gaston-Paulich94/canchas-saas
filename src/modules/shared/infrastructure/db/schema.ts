@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   pgEnum,
@@ -6,8 +7,11 @@ import {
   timestamp,
   boolean,
   integer,
+  smallint,
+  time,
   index,
   unique,
+  check,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -200,6 +204,8 @@ export const courts = pgTable(
     // Precio de referencia por hora, en pesos ARS (enteros). El cobro real se
     // define en la fase de pagos (Mercado Pago); acá es solo informativo.
     pricePerHour: integer("price_per_hour"),
+    // Duración de cada turno reservable, en minutos. Base para generar los slots.
+    slotDurationMin: integer("slot_duration_min").notNull().default(60),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -215,6 +221,40 @@ export const courts = pgTable(
   ],
 );
 
+// ── disponibilidad (horario semanal por cancha) ──────────────────────────────
+
+export const courtAvailability = pgTable(
+  "court_availability",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    courtId: uuid("court_id")
+      .notNull()
+      .references(() => courts.id, { onDelete: "cascade" }),
+    // 0 = Domingo … 6 = Sábado (convención de JS Date.getDay).
+    dayOfWeek: smallint("day_of_week").notNull(),
+    openTime: time("open_time").notNull(),
+    closeTime: time("close_time").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    check("court_availability_day_range", sql`${t.dayOfWeek} between 0 and 6`),
+    check("court_availability_time_order", sql`${t.closeTime} > ${t.openTime}`),
+    index("court_availability_court_id_idx").on(t.courtId),
+    index("court_availability_tenant_id_idx").on(t.tenantId),
+    // El anti-solapamiento de ventanas se hace con un EXCLUDE constraint sobre un
+    // rango de tiempo (btree_gist + tipo timerange) en la migración custom 0005.
+  ],
+);
+
 // Tipos inferidos para uso en la app.
 export type Tenant = typeof tenants.$inferSelect;
 export type NewTenant = typeof tenants.$inferInsert;
@@ -224,3 +264,5 @@ export type ProfileRole = (typeof profileRole.enumValues)[number];
 export type Court = typeof courts.$inferSelect;
 export type NewCourt = typeof courts.$inferInsert;
 export type CourtSport = (typeof courtSport.enumValues)[number];
+export type CourtAvailability = typeof courtAvailability.$inferSelect;
+export type NewCourtAvailability = typeof courtAvailability.$inferInsert;
