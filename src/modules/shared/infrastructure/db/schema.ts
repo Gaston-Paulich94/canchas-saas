@@ -255,6 +255,35 @@ export const courtAvailability = pgTable(
   ],
 );
 
+// ── clientes ─────────────────────────────────────────────────────────────────
+
+export const customers = pgTable(
+  "customers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    // Teléfono: clave de dedup (único por tenant cuando existe — índice único
+    // PARCIAL en la migración custom 0009) y canal de WhatsApp a futuro.
+    phone: text("phone"),
+    email: text("email"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("customers_tenant_id_idx").on(t.tenantId),
+    index("customers_tenant_name_idx").on(t.tenantId, t.name),
+  ],
+);
+
 // ── reservas ─────────────────────────────────────────────────────────────────
 
 export const reservationStatus = pgEnum("reservation_status", [
@@ -276,7 +305,11 @@ export const reservations = pgTable(
     endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
     // El status lo decide SIEMPRE el servidor (nunca viene del payload).
     status: reservationStatus("status").notNull().default("confirmada"),
-    // Contacto inline en el MVP; en la fase de clientes migra a FK customers.
+    // Cliente vinculado (find-or-create al reservar). SET NULL al borrarlo: la
+    // reserva conserva el snapshot inline de nombre/teléfono como historial.
+    customerId: uuid("customer_id").references(() => customers.id, {
+      onDelete: "set null",
+    }),
     customerName: text("customer_name").notNull(),
     customerPhone: text("customer_phone"),
     notes: text("notes"),
@@ -294,6 +327,8 @@ export const reservations = pgTable(
     index("reservations_court_id_idx").on(t.courtId),
     // Agenda del día: se consulta por tenant + rango de fecha.
     index("reservations_tenant_starts_at_idx").on(t.tenantId, t.startsAt),
+    // Historial de reservas de un cliente.
+    index("reservations_customer_id_idx").on(t.customerId),
     // El anti doble-booking es un EXCLUDE parcial (WHERE status <> 'cancelada')
     // sobre tstzrange(starts_at, ends_at) en la migración custom 0007.
   ],
@@ -313,3 +348,5 @@ export type NewCourtAvailability = typeof courtAvailability.$inferInsert;
 export type Reservation = typeof reservations.$inferSelect;
 export type NewReservation = typeof reservations.$inferInsert;
 export type ReservationStatus = (typeof reservationStatus.enumValues)[number];
+export type Customer = typeof customers.$inferSelect;
+export type NewCustomer = typeof customers.$inferInsert;

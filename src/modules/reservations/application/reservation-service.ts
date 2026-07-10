@@ -33,6 +33,7 @@ import {
   updateReservationSchedule,
   cancelReservation as cancelReservationRow,
 } from "@/modules/reservations/infrastructure/reservation.repository";
+import { findOrCreateCustomerTx } from "@/modules/customers/application/customer-service";
 
 /**
  * Use-cases de reservas. Reglas transversales:
@@ -97,12 +98,20 @@ export async function createReservation(
     );
     if (startsAt.getTime() < Date.now()) throw new PastReservationError();
 
+    // Vincula (o crea) el cliente por teléfono dentro de la misma tx. Los
+    // campos inline quedan como snapshot histórico de la reserva.
+    const customer = await findOrCreateCustomerTx(tx, ctx.tenantId, {
+      name: input.customerName,
+      phone: input.customerPhone ?? null,
+    });
+
     try {
       return await insertReservation(tx, {
         tenantId: ctx.tenantId,
         courtId: input.courtId,
         startsAt,
         endsAt,
+        customerId: customer.id,
         customerName: input.customerName,
         customerPhone: input.customerPhone ?? null,
         notes: input.notes ?? null,

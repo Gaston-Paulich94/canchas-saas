@@ -1,4 +1,4 @@
-import { and, eq, ne, gte, lt, asc } from "drizzle-orm";
+import { and, eq, ne, gte, lt, asc, desc } from "drizzle-orm";
 import type { DbTx } from "@/modules/shared/infrastructure/db/client";
 import {
   reservations,
@@ -30,6 +30,24 @@ export async function listReservationsByRange(
       ),
     )
     .orderBy(asc(reservations.startsAt));
+}
+
+/** Historial de reservas de un cliente del tenant (más recientes primero). */
+export async function listReservationsByCustomer(
+  tx: DbTx,
+  tenantId: string,
+  customerId: string,
+): Promise<Reservation[]> {
+  return tx
+    .select()
+    .from(reservations)
+    .where(
+      and(
+        eq(reservations.tenantId, tenantId),
+        eq(reservations.customerId, customerId),
+      ),
+    )
+    .orderBy(desc(reservations.startsAt));
 }
 
 export async function findReservationById(
