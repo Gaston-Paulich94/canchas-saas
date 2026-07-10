@@ -1,4 +1,5 @@
 import { withTenant } from "@/modules/shared/infrastructure/db/with-tenant";
+import { isUniqueViolation } from "@/modules/shared/infrastructure/db/pg-errors";
 import { assertRole } from "@/modules/shared/application/authz";
 import { ROLES, type SessionContext } from "@/modules/auth/domain/roles";
 import {
@@ -26,16 +27,6 @@ import {
 
 // Roles con permiso para administrar canchas.
 const MANAGE_ROLES = [ROLES.OWNER, ROLES.STAFF] as const;
-
-/** Postgres unique_violation. */
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code?: string }).code === "23505"
-  );
-}
 
 /** Traduce campos del input validado a valores de columna (sin tenantId/id). */
 function toColumns(input: CourtInput) {

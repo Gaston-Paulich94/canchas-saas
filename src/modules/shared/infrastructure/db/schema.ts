@@ -255,6 +255,50 @@ export const courtAvailability = pgTable(
   ],
 );
 
+// ── reservas ─────────────────────────────────────────────────────────────────
+
+export const reservationStatus = pgEnum("reservation_status", [
+  "confirmada",
+  "cancelada",
+]);
+
+export const reservations = pgTable(
+  "reservations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    courtId: uuid("court_id")
+      .notNull()
+      .references(() => courts.id, { onDelete: "cascade" }),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    // El status lo decide SIEMPRE el servidor (nunca viene del payload).
+    status: reservationStatus("status").notNull().default("confirmada"),
+    // Contacto inline en el MVP; en la fase de clientes migra a FK customers.
+    customerName: text("customer_name").notNull(),
+    customerPhone: text("customer_phone"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    check("reservations_time_order", sql`${t.endsAt} > ${t.startsAt}`),
+    index("reservations_tenant_id_idx").on(t.tenantId),
+    index("reservations_court_id_idx").on(t.courtId),
+    // Agenda del día: se consulta por tenant + rango de fecha.
+    index("reservations_tenant_starts_at_idx").on(t.tenantId, t.startsAt),
+    // El anti doble-booking es un EXCLUDE parcial (WHERE status <> 'cancelada')
+    // sobre tstzrange(starts_at, ends_at) en la migración custom 0007.
+  ],
+);
+
 // Tipos inferidos para uso en la app.
 export type Tenant = typeof tenants.$inferSelect;
 export type NewTenant = typeof tenants.$inferInsert;
@@ -266,3 +310,6 @@ export type NewCourt = typeof courts.$inferInsert;
 export type CourtSport = (typeof courtSport.enumValues)[number];
 export type CourtAvailability = typeof courtAvailability.$inferSelect;
 export type NewCourtAvailability = typeof courtAvailability.$inferInsert;
+export type Reservation = typeof reservations.$inferSelect;
+export type NewReservation = typeof reservations.$inferInsert;
+export type ReservationStatus = (typeof reservationStatus.enumValues)[number];

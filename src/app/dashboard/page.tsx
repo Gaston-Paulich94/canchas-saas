@@ -81,12 +81,18 @@ export default async function DashboardPage() {
             >
               Canchas
             </Link>
+            <Link
+              href="/dashboard/reservas"
+              className={buttonVariants({ variant: "outline" })}
+            >
+              Reservas
+            </Link>
           </CardContent>
         </Card>
       ) : null}
 
       <p className="text-sm text-muted-foreground">
-        Próximamente: calendario, reservas y pagos.
+        Próximamente: clientes, pagos y reportes.
       </p>
     </main>
   );

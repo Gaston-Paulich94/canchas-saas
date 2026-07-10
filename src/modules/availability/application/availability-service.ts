@@ -1,4 +1,5 @@
 import { withTenant } from "@/modules/shared/infrastructure/db/with-tenant";
+import { isExclusionViolation } from "@/modules/shared/infrastructure/db/pg-errors";
 import { assertRole } from "@/modules/shared/application/authz";
 import { ROLES, type SessionContext } from "@/modules/auth/domain/roles";
 import {
@@ -32,16 +33,6 @@ import {
  */
 
 const MANAGE_ROLES = [ROLES.OWNER, ROLES.STAFF] as const;
-
-// Postgres exclusion_violation (solapamiento de franjas).
-function isExclusionViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code?: string }).code === "23P01"
-  );
-}
 
 export interface CourtAvailabilityView {
   court: Court;
