@@ -41,6 +41,33 @@ const serverEnvSchema = z.object({
         return false;
       }
     }, "MP_TOKEN_ENC_KEY debe ser 32 bytes en base64 (clave AES-256)."),
+
+  // ── Mercado Pago (modelo marketplace / OAuth) ──────────────────────────────
+  // Credenciales de NUESTRA aplicación de marketplace (panel de developers).
+  // Con ellas intercambiamos el `code` del OAuth por los tokens de CADA
+  // complejo. El MP_CLIENT_SECRET nunca sale del servidor ni se loguea.
+  MP_CLIENT_ID: z.string().min(1),
+  MP_CLIENT_SECRET: z.string().min(1),
+
+  // Clave secreta del webhook (panel de MP). Se usa para verificar la firma
+  // HMAC-SHA256 de cada notificación. Sin esto NO se puede confiar en un pago.
+  MP_WEBHOOK_SECRET: z.string().min(1),
+
+  // Comisión del marketplace, en porcentaje del total (0 a 100). Puede tener
+  // decimales (ej. "2.5"). Se aplica en el backend al crear la preferencia.
+  MP_MARKETPLACE_FEE_PERCENT: z
+    .string()
+    .default("0")
+    .refine((v) => {
+      const n = Number(v);
+      return Number.isFinite(n) && n >= 0 && n <= 100;
+    }, "MP_MARKETPLACE_FEE_PERCENT debe ser un número entre 0 y 100.")
+    .transform((v) => Number(v)),
+
+  // URL pública HTTPS de la app. La usan el redirect de OAuth y la
+  // notification_url del webhook (MP exige URLs públicas alcanzables).
+  // En desarrollo puede ser un túnel (ngrok/Cloudflare).
+  APP_PUBLIC_URL: z.string().url(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

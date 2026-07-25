@@ -32,3 +32,25 @@ export async function insertTenant(
   if (!row) throw new Error("No se pudo crear el tenant.");
   return row;
 }
+
+/**
+ * Guarda las credenciales de Mercado Pago del complejo. Los tokens llegan YA
+ * CIFRADOS (AES-256-GCM): este repo nunca ve ni escribe texto plano.
+ */
+export async function updateTenantMpCredentials(
+  tx: DbTx,
+  tenantId: string,
+  data: {
+    mpUserId: string | null;
+    mpAccessTokenEnc: string | null;
+    mpRefreshTokenEnc: string | null;
+    mpTokenExpiresAt: Date | null;
+  },
+): Promise<Tenant | null> {
+  const rows = await tx
+    .update(tenants)
+    .set(data)
+    .where(eq(tenants.id, tenantId))
+    .returning();
+  return rows[0] ?? null;
+}

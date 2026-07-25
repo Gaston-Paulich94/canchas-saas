@@ -106,6 +106,46 @@ docker compose up --build      # db → migrate (one-shot) → app
 En el MVP deployamos en **Vercel**; este compose deja el camino listo para el
 VPS con Caddy.
 
+## Mercado Pago (cobros)
+
+Modelo **marketplace**: cada complejo conecta su propia cuenta por OAuth y la
+plata cae ahí; la plataforma retiene `MP_MARKETPLACE_FEE_PERCENT`.
+
+### Configuración fuera del código
+
+1. Creá una aplicación en <https://www.mercadopago.com.ar/developers> (Checkout
+   Pro, con modelo marketplace). De ahí salen `MP_CLIENT_ID` y `MP_CLIENT_SECRET`.
+2. Cargá el **redirect URI** en el panel: `{APP_PUBLIC_URL}/api/mp/oauth/callback`.
+3. Configurá el **webhook** apuntando a `{APP_PUBLIC_URL}/api/mp/webhooks/payment`
+   y copiá la *clave secreta* que genera el panel a `MP_WEBHOOK_SECRET`.
+4. Creá **cuentas de prueba** (un vendedor y un comprador): el flujo completo
+   solo se puede probar entre cuentas de prueba.
+
+`APP_PUBLIC_URL` tiene que ser alcanzable por Mercado Pago. En local usá un túnel
+(`ngrok http 3000` o `cloudflared`) y cargá esa misma URL en el panel.
+
+### Cómo se cobra
+
+1. La cancha necesita `price_per_hour` cargado (define el importe).
+2. En el detalle de la reserva, *Generar link de pago*: el backend calcula el
+   importe (`precio/hora × duración`), crea la preferencia y devuelve el link.
+3. Se le pasa el link al cliente. Cuando paga, Mercado Pago notifica al webhook
+   y el estado del pago se actualiza solo.
+
+### Garantías de seguridad del flujo
+
+- El **importe** lo calcula siempre el backend; nunca llega del cliente.
+- El **webhook** valida firma HMAC-SHA256 en tiempo constante, rechaza
+  notificaciones fuera de ±5 min (replay) y **re-consulta el pago a la API de
+  MP**: el cuerpo de la notificación nunca define el estado.
+- Los **tokens OAuth** se guardan cifrados (AES-256-GCM) y solo se descifran en
+  memoria al llamar a MP. Nunca se loguean ni se envían al cliente.
+- El webhook llega sin sesión: resuelve su tenant con la función acotada
+  `resolve_payment_tenant()` (rol `payment_resolver`, NOLOGIN, que solo puede
+  leer esa columna) y sigue operando bajo RLS. No hay bypass.
+- Solo el **owner** conecta/desconecta la cuenta que recibe la plata; el staff
+  puede cobrar pero no cambiarla.
+
 ## Endurecimiento pendiente para prod
 
 - Pinnear imágenes Docker por **digest** + escanear con Trivy.

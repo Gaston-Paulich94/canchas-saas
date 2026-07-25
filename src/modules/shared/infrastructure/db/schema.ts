@@ -334,6 +334,64 @@ export const reservations = pgTable(
   ],
 );
 
+// ── pagos (Mercado Pago) ─────────────────────────────────────────────────────
+
+export const paymentStatus = pgEnum("payment_status", [
+  "pendiente",
+  "aprobado",
+  "rechazado",
+  "reembolsado",
+  "cancelado",
+]);
+
+export const payments = pgTable(
+  "payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    reservationId: uuid("reservation_id")
+      .notNull()
+      .references(() => reservations.id, { onDelete: "cascade" }),
+
+    // Importes en CENTAVOS (enteros): nunca float para dinero. El monto lo
+    // calcula el backend desde el precio de la cancha, jamás el cliente.
+    amountCents: integer("amount_cents").notNull(),
+    feeCents: integer("fee_cents").notNull().default(0),
+
+    // El status lo decide el servidor a partir del webhook FIRMADO + la
+    // re-consulta a la API de MP. Nunca un input del cliente.
+    status: paymentStatus("status").notNull().default("pendiente"),
+
+    // Ids de Mercado Pago. mp_payment_id es único por tenant (idempotencia del
+    // webhook: la misma notificación repetida no duplica ni re-procesa).
+    mpPreferenceId: text("mp_preference_id"),
+    mpPaymentId: text("mp_payment_id"),
+    // Punto de enganche para reporting (Fase 9) y conciliación.
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    check("payments_amount_positive", sql`${t.amountCents} > 0`),
+    check(
+      "payments_fee_range",
+      sql`${t.feeCents} >= 0 and ${t.feeCents} <= ${t.amountCents}`,
+    ),
+    index("payments_tenant_id_idx").on(t.tenantId),
+    index("payments_reservation_id_idx").on(t.reservationId),
+    // Idempotencia del webhook y anti doble-cobro por reserva se refuerzan con
+    // índices únicos PARCIALES en la migración custom 0011.
+  ],
+);
+
 // Tipos inferidos para uso en la app.
 export type Tenant = typeof tenants.$inferSelect;
 export type NewTenant = typeof tenants.$inferInsert;
@@ -350,3 +408,6 @@ export type NewReservation = typeof reservations.$inferInsert;
 export type ReservationStatus = (typeof reservationStatus.enumValues)[number];
 export type Customer = typeof customers.$inferSelect;
 export type NewCustomer = typeof customers.$inferInsert;
+export type Payment = typeof payments.$inferSelect;
+export type NewPayment = typeof payments.$inferInsert;
+export type PaymentStatus = (typeof paymentStatus.enumValues)[number];

@@ -16,7 +16,31 @@ allowBuilds:
 #  - esbuild: integridad de binario / dev-server (GHSA-67mh-4wv8-2f99) — vía drizzle-kit.
 #  - undici: bypass de validación de cert TLS + DoS del cliente WebSocket + header
 #    injection (GHSA-p88m-4jfj-68fv y otros) — llega vía testcontainers (solo tests).
+#  - brace-expansion / js-yaml: DoS por expansión exponencial y por merge-keys —
+#    llegan vía eslint y testcontainers (tooling).
+#  - sharp: vulnerabilidades heredadas de libvips — llega vía next (opcional).
+#  - protobufjs: DoS por loop infinito — vía testcontainers.
+#
+# IMPORTANTE: los overrides se acotan POR LÍNEA DE VERSIÓN (major). Un override
+# abierto (">=X") salta a la major siguiente y rompe a quien consuma la API vieja
+# (ej.: minimatch@3 con brace-expansion@5 => "expand is not a function").
 overrides:
-  postcss@<8.5.10: ">=8.5.10"
-  esbuild@<0.28.1: ">=0.28.1"
-  undici@<8.5.0: ">=8.5.0"
+  postcss@<8.5.18: ">=8.5.18 <9"
+  esbuild@<0.28.1: ">=0.28.1 <1"
+  undici@<8.5.0: ">=8.5.0 <9"
+  brace-expansion@1: ">=1.1.16 <2"
+  brace-expansion@2: ">=2.1.2 <3"
+  brace-expansion@5: ">=5.0.8 <6"
+  js-yaml@4: ">=4.3.0 <5"
+  sharp@<0.35.0: ">=0.35.0 <0.36"
+  protobufjs@7: ">=7.6.5 <8"
+
+# RIESGO ACEPTADO (documentado, revisar en cada upgrade de ESLint):
+#   brace-expansion GHSA-mh99-v99m-4gvg (DoS por expansión sin cota) sigue
+#   apareciendo en la línea 1.x que arrastra minimatch@3, interno de ESLint.
+#   El fix existe solo en la major 5, y forzarla rompe minimatch@3
+#   ("expand is not a function"), dejando el lint inutilizable.
+#   Por qué es aceptable: es tooling de DESARROLLO (no entra al runtime ni a la
+#   imagen de producción) y los únicos globs que procesa son los que escribimos
+#   nosotros en eslint.config.mjs — no hay input de atacante en ese camino.
+#   Se resuelve solo cuando ESLint actualice su minimatch.

@@ -17,8 +17,17 @@ import {
 } from "@/modules/reservations/domain/datetime";
 import { previewDateSchema } from "@/modules/availability/domain/schemas";
 import { SPORT_LABELS } from "@/modules/courts/domain/court";
+import { getReservationPayments } from "@/modules/payments/application/payment-service";
+import {
+  PAYMENT_STATUS_LABELS,
+  formatArs,
+} from "@/modules/payments/domain/payment";
 import { CancelReservationButton } from "@/components/reservations/cancel-reservation-button";
 import { RescheduleForm } from "@/components/reservations/reschedule-form";
+import {
+  CreatePaymentLinkButton,
+  CancelPaymentButton,
+} from "@/components/payments/payment-actions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -77,6 +86,16 @@ export default async function ReservaDetallePage({
       ? await getFreeSlots(ctx, targetCourt.id, targetDate)
       : null;
 
+  const payments = await getReservationPayments(ctx, reservation.id);
+  const activePayment =
+    payments.find(
+      (p) => p.status === "pendiente" || p.status === "aprobado",
+    ) ?? null;
+  // Link de Checkout Pro reconstruido desde el id de preferencia (host fijo).
+  const checkoutUrl = activePayment?.mpPreferenceId
+    ? `https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=${encodeURIComponent(activePayment.mpPreferenceId)}`
+    : null;
+
   return (
     <main className="mx-auto flex min-h-screen max-w-lg flex-col gap-6 p-6">
       <header>
@@ -134,6 +153,61 @@ export default async function ReservaDetallePage({
 
       {isActive ? (
         <>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Cobro</CardTitle>
+              <CardDescription>
+                El importe se calcula con el precio por hora de la cancha.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3">
+              {activePayment ? (
+                <>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Importe</span>
+                    <span className="font-medium tabular-nums">
+                      {formatArs(activePayment.amountCents)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Estado</span>
+                    <span
+                      className={
+                        activePayment.status === "aprobado"
+                          ? "font-medium"
+                          : "font-medium text-muted-foreground"
+                      }
+                    >
+                      {PAYMENT_STATUS_LABELS[activePayment.status]}
+                    </span>
+                  </div>
+
+                  {activePayment.status === "pendiente" && checkoutUrl ? (
+                    <div className="grid gap-2">
+                      <a
+                        href={checkoutUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="break-all rounded-md border p-2 text-xs hover:bg-accent"
+                      >
+                        {checkoutUrl}
+                      </a>
+                      <p className="text-xs text-muted-foreground">
+                        Pasale este link al cliente para que pague.
+                      </p>
+                      <CancelPaymentButton
+                        reservationId={reservation.id}
+                        paymentId={activePayment.id}
+                      />
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <CreatePaymentLinkButton reservationId={reservation.id} />
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Mover la reserva</CardTitle>

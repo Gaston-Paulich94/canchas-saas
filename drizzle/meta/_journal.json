@@ -71,6 +71,20 @@
       "when": 1783715465122,
       "tag": "0009_customers_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785000852977,
+      "tag": "0010_yielding_proteus",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785000855223,
+      "tag": "0011_payments_rls",
+      "breakpoints": true
     }
   ]
 }

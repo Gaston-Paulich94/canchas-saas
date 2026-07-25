@@ -93,6 +93,12 @@ export default async function DashboardPage() {
             >
               Clientes
             </Link>
+            <Link
+              href="/dashboard/pagos"
+              className={buttonVariants({ variant: "outline" })}
+            >
+              Cobros
+            </Link>
           </CardContent>
         </Card>
       ) : null}
