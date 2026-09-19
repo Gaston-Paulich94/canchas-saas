@@ -20,6 +20,8 @@ allowBuilds:
 #    llegan vía eslint y testcontainers (tooling).
 #  - sharp: vulnerabilidades heredadas de libvips — llega vía next (opcional).
 #  - protobufjs: DoS por loop infinito — vía testcontainers.
+#  - browserslist / nanoid / baseline-browser-mapping: DoS y crash por input
+#    malicioso — llegan vía next (build) y postcss.
 #
 # IMPORTANTE: los overrides se acotan POR LÍNEA DE VERSIÓN (major). Un override
 # abierto (">=X") salta a la major siguiente y rompe a quien consuma la API vieja
@@ -27,20 +29,16 @@ allowBuilds:
 overrides:
   postcss@<8.5.18: ">=8.5.18 <9"
   esbuild@<0.28.1: ">=0.28.1 <1"
-  undici@<8.5.0: ">=8.5.0 <9"
-  brace-expansion@1: ">=1.1.16 <2"
+  undici@8: ">=8.9.0 <9"
+  brace-expansion@1: ">=1.1.21 <2"
   brace-expansion@2: ">=2.1.2 <3"
-  brace-expansion@5: ">=5.0.8 <6"
-  js-yaml@4: ">=4.3.0 <5"
-  sharp@<0.35.0: ">=0.35.0 <0.36"
+  brace-expansion@5: ">=5.0.12 <6"
+  js-yaml@4: ">=4.3.2 <5"
+  sharp@<0.35.4: ">=0.35.4 <0.36"
   protobufjs@7: ">=7.6.5 <8"
+  browserslist@4: ">=4.28.7 <5"
+  nanoid@3: ">=3.3.18 <4"
+  baseline-browser-mapping@2: ">=2.11.0 <3"
 
-# RIESGO ACEPTADO (documentado, revisar en cada upgrade de ESLint):
-#   brace-expansion GHSA-mh99-v99m-4gvg (DoS por expansión sin cota) sigue
-#   apareciendo en la línea 1.x que arrastra minimatch@3, interno de ESLint.
-#   El fix existe solo en la major 5, y forzarla rompe minimatch@3
-#   ("expand is not a function"), dejando el lint inutilizable.
-#   Por qué es aceptable: es tooling de DESARROLLO (no entra al runtime ni a la
-#   imagen de producción) y los únicos globs que procesa son los que escribimos
-#   nosotros en eslint.config.mjs — no hay input de atacante en ese camino.
-#   Se resuelve solo cuando ESLint actualice su minimatch.
+# Historial: brace-expansion 1.x (vía minimatch@3, interno de ESLint) fue un
+# "riesgo aceptado" hasta que se publicó el backport 1.1.18+ — ya no hace falta.
