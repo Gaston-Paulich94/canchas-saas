@@ -224,6 +224,15 @@ export default async function DashboardPage() {
               {s.label}
             </Link>
           ))}
+          {/* Los números del negocio los ve el dueño. */}
+          {ctx.role === ROLES.OWNER ? (
+            <Link
+              href="/dashboard/reportes"
+              className={buttonVariants({ variant: "outline" })}
+            >
+              Reportes
+            </Link>
+          ) : null}
         </CardContent>
       </Card>
     </main>
