@@ -86,6 +86,59 @@ export function formatArs(cents: number): string {
   }).format(cents / 100);
 }
 
+// ── Correspondencia entre la notificación de MP y nuestro pago ───────────────
+
+/** Por qué una notificación NO corresponde al pago que dice referenciar. */
+export type PaymentMismatchReason = "referencia" | "importe" | "moneda";
+
+/** Lo que esperamos cobrar (fila nuestra). */
+export interface ExpectedPayment {
+  id: string;
+  amountCents: number;
+}
+
+/** Lo que Mercado Pago dice que se pagó (consultado a su API). */
+export interface NotifiedPayment {
+  externalReference: string | null;
+  amountCents: number | null;
+  currencyId: string | null;
+}
+
+/**
+ * Verifica que una notificación corresponda EXACTAMENTE a nuestro pago, antes
+ * de darlo por aprobado. Devuelve el motivo del rechazo, o null si coincide.
+ *
+ * Es el control que evita acreditar una reserva con un pago que no es el suyo:
+ *  - `referencia`: exige que el external_reference sea nuestro id. Se rechaza
+ *    también si viene vacío (fail-closed): un pago hecho por fuera del sistema,
+ *    en la misma cuenta del complejo, no tiene referencia nuestra y no debe
+ *    acreditar nada.
+ *  - `importe`: el monto informado por MP tiene que ser el que calculamos. Lo
+ *    recalcula el backend, así que una diferencia es señal de manipulación o de
+ *    un cambio de precio a mitad de camino.
+ *  - `moneda`: si MP informa moneda, tiene que ser ARS. Si no la informa no se
+ *    rechaza por eso: la referencia y el importe ya acotan el riesgo, y
+ *    bloquear por un campo ausente dejaría pagos reales sin acreditar.
+ */
+export function checkPaymentMatches(
+  expected: ExpectedPayment,
+  notified: NotifiedPayment,
+): PaymentMismatchReason | null {
+  if (!notified.externalReference || notified.externalReference !== expected.id) {
+    return "referencia";
+  }
+  if (
+    notified.amountCents === null ||
+    notified.amountCents !== expected.amountCents
+  ) {
+    return "importe";
+  }
+  if (notified.currencyId !== null && notified.currencyId !== "ARS") {
+    return "moneda";
+  }
+  return null;
+}
+
 // ── Errores de dominio ───────────────────────────────────────────────────────
 
 /** El complejo todavía no conectó su cuenta de Mercado Pago. */

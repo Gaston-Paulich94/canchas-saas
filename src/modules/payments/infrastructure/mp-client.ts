@@ -163,7 +163,9 @@ export interface MpPaymentSnapshot {
   mpPaymentId: string;
   status: PaymentStatus;
   externalReference: string | null;
-  amount: number | null;
+  /** Importe que MP dice que se pagó, en CENTAVOS (MP lo informa en pesos). */
+  amountCents: number | null;
+  currencyId: string | null;
   approvedAt: Date | null;
 }
 
@@ -196,7 +198,12 @@ export async function getPayment(
     mpPaymentId: parsed.data.id,
     status: mapMpStatus(parsed.data.status),
     externalReference: parsed.data.external_reference ?? null,
-    amount: parsed.data.transaction_amount ?? null,
+    // Pesos → centavos con redondeo: evita que un 0.1 flotante no coincida.
+    amountCents:
+      parsed.data.transaction_amount === undefined
+        ? null
+        : Math.round(parsed.data.transaction_amount * 100),
+    currencyId: parsed.data.currency_id ?? null,
     approvedAt: approved && !Number.isNaN(approved.getTime()) ? approved : null,
   };
 }
