@@ -1,5 +1,7 @@
 # Canchas SaaS
 
+[![CI](https://github.com/Gaston-Paulich94/canchas-saas/actions/workflows/ci.yml/badge.svg)](https://github.com/Gaston-Paulich94/canchas-saas/actions/workflows/ci.yml)
+
 SaaS multi-tenant de gestión para complejos deportivos (pádel, fútbol, tenis).
 Mercado: Argentina. Reservas + panel de administración + reporting, con foco en
 WhatsApp y Mercado Pago.

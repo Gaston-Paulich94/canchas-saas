@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Si se pushea dos veces seguido, cancela la corrida vieja.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: typecheck · lint · tests · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        # La versión sale de "packageManager" en package.json.
+
+      - uses: actions/setup-node@v4
+        with:
+          # Misma major que la imagen de producción (node:22-alpine).
+          node-version: 22
+          cache: pnpm
+
+      - name: Instalar con lockfile congelado
+        run: pnpm install --frozen-lockfile
+
+      - run: pnpm typecheck
+
+      - run: pnpm lint
+
+      # Los tests de integración levantan Postgres con testcontainers; el
+      # runner de GitHub ya trae Docker. Las variables de entorno dummy las
+      # pone tests/setup-env.ts.
+      - name: Tests
+        run: pnpm test
+
+      # El build valida el esquema de env en tiempo de build, así que necesita
+      # TODAS las variables. Son placeholders: acá no hay secretos reales.
+      - name: Build de producción
+        run: pnpm build
+        env:
+          NODE_ENV: production
+          DATABASE_URL: postgres://build:build@localhost:5432/build
+          APP_DATABASE_URL: postgres://build:build@localhost:5432/build
+          BETTER_AUTH_SECRET: ci_placeholder_secret_de_32_caracteres_min
+          BETTER_AUTH_URL: http://localhost:3000
+          MP_TOKEN_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          MP_CLIENT_ID: ci-placeholder-client-id
+          MP_CLIENT_SECRET: ci-placeholder-client-secret
+          MP_WEBHOOK_SECRET: ci-placeholder-webhook-secret
+          MP_MARKETPLACE_FEE_PERCENT: "0"
+          APP_PUBLIC_URL: http://localhost:3000
+
+  dependencias:
+    name: auditoría de dependencias
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Job aparte: que un advisory nuevo en una transitiva no tape el
+      # resultado de los tests. Falla con severidad alta o crítica.
+      - name: pnpm audit
+        run: pnpm audit --audit-level high
