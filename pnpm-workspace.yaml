@@ -22,6 +22,8 @@ allowBuilds:
 #  - protobufjs: DoS por loop infinito — vía testcontainers.
 #  - browserslist / nanoid / baseline-browser-mapping: DoS y crash por input
 #    malicioso — llegan vía next (build) y postcss.
+#  - @grpc/grpc-js: certificados no autorizados aceptados como válidos —
+#    llega vía testcontainers > dockerode (solo tests).
 #
 # IMPORTANTE: los overrides se acotan POR LÍNEA DE VERSIÓN (major). Un override
 # abierto (">=X") salta a la major siguiente y rompe a quien consuma la API vieja
@@ -39,6 +41,18 @@ overrides:
   browserslist@4: ">=4.28.7 <5"
   nanoid@3: ">=3.3.18 <4"
   baseline-browser-mapping@2: ">=2.11.0 <3"
+  "@grpc/grpc-js@1": ">=1.14.5 <2"
 
 # Historial: brace-expansion 1.x (vía minimatch@3, interno de ESLint) fue un
 # "riesgo aceptado" hasta que se publicó el backport 1.1.18+ — ya no hace falta.
+
+# Advisory IGNORADO en `pnpm audit` (revisar en cada actualización de ESLint):
+#   GHSA-vfj7-8cjw-p6xm — braces: DoS por patrones glob muy anidados.
+#   No hay versión parcheada publicada (pide >=3.0.4 y la última es 3.0.3) y
+#   llega como transitiva de eslint-config-next > @next/eslint-plugin-next.
+#   Es tooling de DESARROLLO y los únicos globs que procesa son los nuestros,
+#   así que no hay input de atacante en ese camino. Sin esta exclusión, el job
+#   de auditoría del CI quedaría rojo por algo que no podemos arreglar.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-vfj7-8cjw-p6xm
