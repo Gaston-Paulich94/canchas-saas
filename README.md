@@ -148,6 +148,9 @@ plata cae ahí; la plataforma retiene `MP_MARKETPLACE_FEE_PERCENT`.
 
 ## Endurecimiento pendiente para prod
 
+- **IP real para el rate-limit de login**: detrás de Caddy, fijar
+  `header_up X-Real-IP {remote_host}`. Sin eso el límite por IP se puede
+  falsear (el límite por cuenta sigue vigente). En Vercel ya viene fijado.
 - Pinnear imágenes Docker por **digest** + escanear con Trivy.
 - Caddy como reverse proxy con TLS; no exponer Postgres.
 - `pnpm audit` / Snyk y `gitleaks` en CI.

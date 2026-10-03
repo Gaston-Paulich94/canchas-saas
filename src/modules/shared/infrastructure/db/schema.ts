@@ -117,6 +117,27 @@ export const verification = pgTable(
   (t) => [index("verification_identifier_idx").on(t.identifier)],
 );
 
+/**
+ * Contador de intentos para el rate-limit de login/registro (anti fuerza
+ * bruta). Vive en la DB para que funcione con varias instancias (serverless).
+ *
+ * `key_hash` es un HMAC de la clave lógica (ej. "login:email:x@y.com"): no se
+ * guardan emails ni IPs en claro. Sin tenant ni RLS, como las tablas de
+ * better-auth: se consulta antes de que exista una sesión.
+ */
+export const authRateLimits = pgTable("auth_rate_limits", {
+  keyHash: text("key_hash").primaryKey(),
+  count: integer("count").notNull(),
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Negocio (multi-tenant, con RLS)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -170,10 +191,11 @@ export const profiles = pgTable(
       .$onUpdate(() => new Date()),
   },
   (t) => [
-    // Un usuario tiene un único profile por tenant.
-    unique("profiles_user_tenant_unique").on(t.userId, t.tenantId),
+    // Un usuario pertenece a UN solo complejo (la sesión deriva el tenant de su
+    // único profile). A nivel DB impide que se agregue un segundo profile en
+    // otro tenant — p. ej. para colarse como owner de un complejo ajeno.
+    unique("profiles_user_unique").on(t.userId),
     index("profiles_tenant_id_idx").on(t.tenantId),
-    index("profiles_user_id_idx").on(t.userId),
   ],
 );
 

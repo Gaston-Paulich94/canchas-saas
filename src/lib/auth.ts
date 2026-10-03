@@ -16,7 +16,12 @@ import {
  * Seguridad:
  *  - Cookies de sesión HttpOnly + SameSite=Lax + Secure (en prod). better-auth
  *    crea una sesión nueva en cada login (rotación de sesión).
- *  - Rate limiting activo (anti fuerza bruta en login y endpoints sensibles).
+ *  - Login y registro NO se exponen por HTTP (`disabledPaths`): el único
+ *    camino son nuestras Server Actions, que aplican el rate-limit propio en la
+ *    DB. Motivo: el limitador de better-auth solo corre en su router HTTP y
+ *    `auth.api.*` desde el servidor lo esquiva; además, `/sign-up/email` por
+ *    HTTP creaba usuarios SIN complejo, salteando registerOwner.
+ *  - El rate-limit de better-auth sigue activo para el resto de /api/auth/*.
  *  - Política de contraseña: mínimo 12, máximo 128.
  *  - El plugin nextCookies() persiste las cookies cuando llamamos a auth.api
  *    desde Server Actions.
@@ -30,6 +35,9 @@ export const auth = betterAuth({
     provider: "pg",
     schema: { user, session, account, verification },
   }),
+
+  // Ver comentario de arriba: estos caminos solo por Server Action.
+  disabledPaths: ["/sign-in/email", "/sign-up/email"],
 
   emailAndPassword: {
     enabled: true,

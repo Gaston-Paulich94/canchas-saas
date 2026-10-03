@@ -85,6 +85,20 @@
       "when": 1785000855223,
       "tag": "0011_payments_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1789836372224,
+      "tag": "0012_windy_loners",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1789836373710,
+      "tag": "0013_profiles_self_readonly",
+      "breakpoints": true
     }
   ]
 }

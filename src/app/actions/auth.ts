@@ -8,6 +8,12 @@ import {
   loginSchema,
 } from "@/modules/auth/domain/schemas";
 import { registerOwner } from "@/modules/auth/application/register-owner";
+import {
+  isLoginAllowed,
+  isRegisterAllowed,
+  TOO_MANY_ATTEMPTS_MESSAGE,
+} from "@/modules/auth/application/rate-limit";
+import { clientIpFrom } from "@/lib/client-ip";
 
 export interface ActionState {
   error: string | null;
@@ -17,6 +23,10 @@ export interface ActionState {
  * Las actions validan el input con Zod `.strict()` en el borde, delegan la
  * lógica a la capa de aplicación y devuelven SIEMPRE mensajes genéricos al
  * cliente (sin stack traces ni detalle interno).
+ *
+ * Login y registro pasan SIEMPRE por el rate-limit propio (ver
+ * modules/auth/application/rate-limit.ts): `auth.api.*` llamado desde el
+ * servidor no pasa por el limitador de better-auth.
  */
 
 export async function registerAction(
@@ -34,6 +44,11 @@ export async function registerAction(
     return {
       error: parsed.error.issues[0]?.message ?? "Datos inválidos.",
     };
+  }
+
+  const ip = clientIpFrom(await headers());
+  if (!(await isRegisterAllowed(ip))) {
+    return { error: TOO_MANY_ATTEMPTS_MESSAGE };
   }
 
   try {
@@ -62,6 +77,13 @@ export async function loginAction(
 
   if (!parsed.success) {
     return { error: "Email o contraseña inválidos." };
+  }
+
+  // El cupo se consume ANTES de verificar la contraseña: cada intento cuenta,
+  // sea correcto o no.
+  const ip = clientIpFrom(await headers());
+  if (!(await isLoginAllowed(ip, parsed.data.email))) {
+    return { error: TOO_MANY_ATTEMPTS_MESSAGE };
   }
 
   try {

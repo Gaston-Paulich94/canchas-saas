@@ -3,6 +3,7 @@ import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { setupTestDb, type TestDb } from "./helpers/postgres";
 import { findTenantById } from "@/modules/tenants/infrastructure/tenant.repository";
+import { isUniqueViolation } from "@/modules/shared/infrastructure/db/pg-errors";
 
 /**
  * Tests del THREAT principal: aislamiento de tenant.
@@ -95,6 +96,48 @@ describe("Aislamiento de tenant (RLS + filtro de app)", () => {
                  values (${userA}, ${tenantB}, 'staff')`;
       }),
     ).rejects.toThrow();
+  });
+
+  // ── Escalada de privilegios vía profiles (regresión del fix de seguridad) ──
+
+  it("contexto self: NO puede insertarse como owner de un tenant ajeno (RLS)", async () => {
+    await expect(
+      db.appSql.begin(async (tx) => {
+        await tx`select set_config('app.user_id', ${userA}, true)`;
+        await tx`insert into profiles (user_id, tenant_id, role)
+                 values (${userA}, ${tenantB}, 'owner')`;
+      }),
+    ).rejects.toThrow(/row-level security/);
+  });
+
+  it("contexto self: NO puede cambiarse el rol", async () => {
+    await db.appSql.begin(async (tx) => {
+      await tx`select set_config('app.user_id', ${userA}, true)`;
+      const updated = await tx`
+        update profiles set role = 'cliente' where user_id = ${userA} returning id`;
+      expect(updated).toHaveLength(0);
+    });
+    const [row] = await db.adminSql`select role from profiles where user_id = ${userA}`;
+    expect(row?.role).toBe("owner");
+  });
+
+  it("contexto self: sigue pudiendo LEER su propio profile (bootstrap de sesión)", async () => {
+    await db.appSql.begin(async (tx) => {
+      await tx`select set_config('app.user_id', ${userA}, true)`;
+      const rows = await tx`select tenant_id from profiles where user_id = ${userA}`;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.tenant_id).toBe(tenantA);
+    });
+  });
+
+  it("un usuario no puede tener un segundo profile, ni siquiera con el contexto del otro tenant", async () => {
+    await expect(
+      db.appSql.begin(async (tx) => {
+        await tx`select set_config('app.tenant_id', ${tenantB}, true)`;
+        await tx`insert into profiles (user_id, tenant_id, role)
+                 values (${userA}, ${tenantB}, 'owner')`;
+      }),
+    ).rejects.toSatisfy(isUniqueViolation);
   });
 
   it("el repository real (findTenantById) respeta el aislamiento", async () => {
