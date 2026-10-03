@@ -28,7 +28,12 @@ ENV NODE_ENV=production \
     APP_DATABASE_URL=postgres://build:build@localhost:5432/build \
     BETTER_AUTH_SECRET=build_time_placeholder_secret_32_chars_min \
     BETTER_AUTH_URL=http://localhost:3000 \
-    MP_TOKEN_ENC_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+    MP_TOKEN_ENC_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
+    MP_CLIENT_ID=build_time_placeholder \
+    MP_CLIENT_SECRET=build_time_placeholder \
+    MP_WEBHOOK_SECRET=build_time_placeholder \
+    MP_MARKETPLACE_FEE_PERCENT=0 \
+    APP_PUBLIC_URL=http://localhost:3000
 RUN pnpm build
 
 # ── migrator: corre `pnpm db:migrate` (tiene source + node_modules, sin build) ─

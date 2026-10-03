@@ -58,6 +58,14 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET en .env}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
       MP_TOKEN_ENC_KEY: ${MP_TOKEN_ENC_KEY:?set MP_TOKEN_ENC_KEY en .env}
+      # Mercado Pago: env.ts las valida al arrancar, así que sin estas la
+      # app no levanta. Credenciales del panel de developers (ver README).
+      MP_CLIENT_ID: ${MP_CLIENT_ID:?set MP_CLIENT_ID en .env}
+      MP_CLIENT_SECRET: ${MP_CLIENT_SECRET:?set MP_CLIENT_SECRET en .env}
+      MP_WEBHOOK_SECRET: ${MP_WEBHOOK_SECRET:?set MP_WEBHOOK_SECRET en .env}
+      MP_MARKETPLACE_FEE_PERCENT: ${MP_MARKETPLACE_FEE_PERCENT:-0}
+      # URL pública HTTPS: MP la usa para el OAuth y el webhook.
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:?set APP_PUBLIC_URL en .env}
     depends_on:
       migrate:
         condition: service_completed_successfully
