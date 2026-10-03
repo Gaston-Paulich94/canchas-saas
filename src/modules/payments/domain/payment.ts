@@ -139,6 +139,120 @@ export function checkPaymentMatches(
   return null;
 }
 
+// ── Qué hacer con una notificación (ya verificada y correspondida) ───────────
+
+/** Estado local del pago, tal como está en nuestra base. */
+export interface LocalPaymentState {
+  status: PaymentStatus;
+  mpPaymentId: string | null;
+  paidAt: Date | null;
+}
+
+/** Estado actual del pago según la API de Mercado Pago. */
+export interface RemotePaymentState {
+  status: PaymentStatus;
+  mpPaymentId: string;
+  approvedAt: Date | null;
+}
+
+export interface NotificationContext {
+  /** La reserva del pago está cancelada. */
+  reservaCancelada: boolean;
+  /** Existe OTRO pago vivo (pendiente/aprobado) para la misma reserva. */
+  otroCobroActivo: boolean;
+}
+
+export type PaymentPatch = {
+  status: PaymentStatus;
+  mpPaymentId: string;
+  paidAt: Date | null;
+};
+
+export type NotificationDecision =
+  | { kind: "sin_cambios" }
+  | { kind: "actualizar"; patch: PaymentPatch; requiereReembolso: boolean };
+
+/**
+ * Decide cómo impacta una notificación de MP en nuestro pago.
+ *
+ * El caso delicado es el PAGO TARDÍO: el link se paga cuando el cobro ya no
+ * correspondía (el operador lo anuló, la reserva se canceló, o ya hay otro
+ * link vivo para la misma reserva). Antes, el webhook igual lo pasaba a
+ * "aprobado", lo que (a) aprobaba en silencio un cobro anulado y (b) si había
+ * otro link vivo chocaba con el índice único de "un pago vivo por reserva":
+ * 500, MP reintentando para siempre y el pago NUNCA registrado.
+ *
+ * Ahora un pago tardío no se reactiva nunca: queda "cancelado" con su
+ * `mpPaymentId` y `paidAt`, que es la marca de "plata recibida que hay que
+ * devolver" (ver `needsRefund`). No se reembolsa automáticamente: devolver
+ * plata es decisión del complejo. Si después MP informa el reembolso, el pago
+ * pasa a "reembolsado" y la marca se resuelve sola.
+ */
+export function decidePaymentUpdate(
+  local: LocalPaymentState,
+  remote: RemotePaymentState,
+  ctx: NotificationContext,
+  now: Date = new Date(),
+): NotificationDecision {
+  const remoteActivo = ACTIVE_PAYMENT_STATUSES.includes(remote.status);
+  // "Anulado" es una decisión NUESTRA. "rechazado" no: lo pone MP cuando falla
+  // un intento, y el cliente puede reintentar con el mismo link.
+  const anulado = local.status === "cancelado" || local.status === "reembolsado";
+  // MP reenvía varias notificaciones por el mismo pago. Si ya lo teníamos
+  // aprobado, sigue siéndolo aunque la reserva se haya cancelado después:
+  // qué hacer con esa plata es política del complejo, no del webhook.
+  const yaAprobado =
+    local.status === "aprobado" && local.mpPaymentId === remote.mpPaymentId;
+  const puedeActivarse =
+    yaAprobado || (!anulado && !ctx.reservaCancelada && !ctx.otroCobroActivo);
+
+  let patch: PaymentPatch;
+  let requiereReembolso = false;
+
+  if (remoteActivo && !puedeActivarse) {
+    // Pendiente en MP no movió plata: no hay nada que registrar.
+    if (remote.status !== "aprobado") return { kind: "sin_cambios" };
+    patch = {
+      status: "cancelado",
+      mpPaymentId: remote.mpPaymentId,
+      paidAt: remote.approvedAt ?? now,
+    };
+    requiereReembolso = true;
+  } else if (local.status === "cancelado" && remote.status !== "reembolsado") {
+    // Anulado y MP dice rechazado/cancelado: no entró plata, nada que hacer.
+    return { kind: "sin_cambios" };
+  } else {
+    patch = {
+      status: remote.status,
+      mpPaymentId: remote.mpPaymentId,
+      paidAt:
+        remote.status === "aprobado"
+          ? (remote.approvedAt ?? now)
+          : remote.status === "reembolsado"
+            ? local.paidAt // se conserva cuándo se había cobrado
+            : null,
+    };
+  }
+
+  // Idempotencia: la misma notificación reenviada no cambia nada.
+  if (local.status === patch.status && local.mpPaymentId === patch.mpPaymentId) {
+    return { kind: "sin_cambios" };
+  }
+  return { kind: "actualizar", patch, requiereReembolso };
+}
+
+/**
+ * Plata recibida que hay que devolver: un cobro anulado (o de una reserva
+ * cancelada) que igual se pagó. Solo `decidePaymentUpdate` produce esta
+ * combinación: un anulado normal nunca tiene `paidAt`.
+ */
+export function needsRefund(payment: {
+  status: PaymentStatus;
+  paidAt: Date | null;
+}): boolean {
+  return payment.status === "cancelado" && payment.paidAt !== null;
+}
+
 // ── Errores de dominio ───────────────────────────────────────────────────────
 
 /** El complejo todavía no conectó su cuenta de Mercado Pago. */

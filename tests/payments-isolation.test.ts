@@ -10,6 +10,10 @@ import {
 } from "@/modules/payments/infrastructure/payment.repository";
 import { arDateTimeToUtc } from "@/modules/reservations/domain/datetime";
 import { isUniqueViolation } from "@/modules/shared/infrastructure/db/pg-errors";
+import {
+  decidePaymentUpdate,
+  needsRefund,
+} from "@/modules/payments/domain/payment";
 
 /**
  * Pagos contra Postgres real con el rol app_user (respeta RLS):
@@ -222,6 +226,56 @@ describe("Pagos — aislamiento, idempotencia y anti doble cobro", () => {
       }),
     );
     expect(created.tenantId).toBe(tenantB);
+  });
+
+  it("pago tardío (regresión): reactivarlo chocaba con el índice; el patch decidido no", async () => {
+    const r = randomUUID();
+    await db.adminSql`insert into "reservations"
+      (id, tenant_id, court_id, starts_at, ends_at, customer_name) values
+      (${r}, ${tenantA}, ${courtA},
+       ${arDateTimeToUtc(D, "22:00")}, ${arDateTimeToUtc(D, "23:00")}, 'Pago tardío')`;
+
+    // El operador anuló el primer link y generó uno nuevo.
+    const viejo = await asTenant(tenantA, (tx) =>
+      insertPayment(tx, {
+        tenantId: tenantA,
+        reservationId: r,
+        amountCents: 1_200_000,
+        feeCents: 0,
+        status: "cancelado",
+      }),
+    );
+    await asTenant(tenantA, (tx) =>
+      insertPayment(tx, { tenantId: tenantA, reservationId: r, amountCents: 1_200_000, feeCents: 0 }),
+    );
+
+    // Lo que hacía el webhook antes: pasar el link viejo a "aprobado" => 23505,
+    // la ruta devolvía 500 y MP reintentaba para siempre.
+    await expect(
+      asTenant(tenantA, (tx) =>
+        updatePayment(tx, tenantA, viejo.id, {
+          status: "aprobado",
+          mpPaymentId: "mp-tardio",
+          paidAt: new Date(),
+        }),
+      ),
+    ).rejects.toSatisfy(isUniqueViolation);
+
+    // Lo que decide ahora: registrarlo como plata a devolver, sin reactivarlo.
+    const decision = decidePaymentUpdate(
+      viejo,
+      { status: "aprobado", mpPaymentId: "mp-tardio", approvedAt: new Date() },
+      { reservaCancelada: false, otroCobroActivo: true },
+    );
+    expect(decision.kind).toBe("actualizar");
+    if (decision.kind !== "actualizar") return;
+
+    const updated = await asTenant(tenantA, (tx) =>
+      updatePayment(tx, tenantA, viejo.id, decision.patch),
+    );
+    expect(updated?.status).toBe("cancelado");
+    expect(updated?.mpPaymentId).toBe("mp-tardio");
+    expect(updated && needsRefund(updated)).toBe(true);
   });
 
   // ── Función de resolución del webhook ──────────────────────────────────────
