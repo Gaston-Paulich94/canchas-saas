@@ -42,6 +42,7 @@ export const mpPaymentResponseSchema = z.object({
   status: z.string().min(1),
   external_reference: z.string().uuid().nullable().optional(),
   transaction_amount: z.number().nonnegative().optional(),
+  currency_id: z.string().nullable().optional(),
   date_approved: z.string().nullable().optional(),
 });
 
