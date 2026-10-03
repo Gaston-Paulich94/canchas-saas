@@ -4,7 +4,9 @@ SaaS multi-tenant de gestión para complejos deportivos (pádel, fútbol, tenis)
 Mercado: Argentina. Reservas + panel de administración + reporting, con foco en
 WhatsApp y Mercado Pago.
 
-> Estado: **Fase 1** — scaffold + autenticación + base multi-tenant.
+> Estado: **MVP casi completo** — 8 de las 9 fases. Queda pendiente
+> notificaciones por WhatsApp (fase 7, pospuesta) y probar los cobros contra
+> Mercado Pago: el código está hecho y testeado, pero nunca corrió contra MP.
 
 ## Stack
 
@@ -35,6 +37,23 @@ El núcleo (aplicación + dominio) no conoce Next.js, Drizzle ni Mercado Pago.
 
 Si una capa se misconfigura, la otra sostiene. El `tenant_id` y el rol se
 derivan SIEMPRE de la sesión en el servidor, nunca de input del cliente.
+
+### Autenticación y anti fuerza bruta
+
+- better-auth en nuestro Postgres. Contraseña de 12 caracteres como mínimo.
+- Login y registro van **solo** por Server Action: `/sign-in/email` y
+  `/sign-up/email` están deshabilitados por HTTP. Motivo: el rate-limit de
+  better-auth corre en su router HTTP y no cubre las llamadas `auth.api.*`
+  desde el servidor, así que dejar los dos caminos abiertos significaba un
+  login sin freno. De paso, por ese endpoint se podían crear usuarios sin
+  complejo, salteando el alta normal.
+- Rate-limit propio con contador en Postgres (sirve con varias instancias):
+  10 intentos por cuenta cada 15 min, 20 por IP cada 10 min, y 5 registros por
+  IP por hora. Las claves se guardan en HMAC: la tabla no tiene emails ni IPs
+  en claro. Si el contador falla, el intento se rechaza.
+- Un usuario pertenece a un único complejo (`UNIQUE(user_id)` en `profiles`) y
+  la policy RLS de bootstrap es de **solo lectura**, para que la capa de base
+  de datos no permita insertarse en un complejo ajeno ni cambiarse el rol.
 
 ### Dos roles de base de datos (RLS real)
 
@@ -72,11 +91,19 @@ docker compose up -d db
 # 4. Migraciones (crea rol app_user + tablas + RLS)
 pnpm db:migrate
 
-# 5. App
+# 5. (Opcional) Datos de demo para recorrer la app
+pnpm db:seed      # `--reset` la regenera
+
+# 6. App
 pnpm dev          # http://localhost:3000
 ```
 
-Flujo: `/register` (crea complejo + owner) → `/dashboard` (muestra el complejo).
+Flujo: `/register` crea el complejo y su dueño → `/dashboard`.
+
+El seed arma "Complejo Demo" (3 canchas con horarios, clientes y reservas del
+mes) más un "Complejo Vecino" para comprobar el aislamiento. Usuarios:
+`dueno@demo.test`, `staff@demo.test` y `vecino@demo.test`, contraseña
+`Demo-Canchas-2026`. Solo corre contra una base local.
 
 ## Comandos
 
@@ -88,6 +115,7 @@ Flujo: `/register` (crea complejo + owner) → `/dashboard` (muestra el complejo
 | `pnpm lint` | ESLint |
 | `pnpm db:generate` | genera migración Drizzle desde el schema |
 | `pnpm db:migrate` | aplica migraciones (rol admin) + crea `app_user` |
+| `pnpm db:seed` | datos de demo en local (`--reset` regenera) |
 | `pnpm test` | tests (Vitest + testcontainers) |
 
 > Los tests de integración levantan Postgres con **testcontainers**: necesitás
@@ -158,6 +186,17 @@ plata cae ahí; la plataforma retiene `MP_MARKETPLACE_FEE_PERCENT`.
 
 ## Orden de construcción
 
-Fase 1 (esta) → canchas → calendario → reservas → clientes → pagos (MP) →
-WhatsApp → panel admin → reporting. Una feature a la vez, con su Definition of
-Done (typecheck, lint, skill `seguridad`, tests críticos).
+| # | Fase | Estado |
+|---|------|--------|
+| 1 | Scaffold + auth + base multi-tenant con RLS | ✅ |
+| 2 | Gestión de canchas | ✅ |
+| 3 | Disponibilidad semanal + generación de turnos | ✅ |
+| 4 | Reservas, con doble booking bloqueado en la DB | ✅ |
+| 5 | Gestión de clientes | ✅ |
+| 6 | Cobros con Mercado Pago | ✅ código · falta probar contra MP |
+| 7 | Notificaciones por WhatsApp | ⏸ pospuesta |
+| 8 | Panel del dueño | ✅ |
+| 9 | Reporting | ✅ |
+
+Una feature a la vez, con su Definition of Done: `pnpm typecheck`, `pnpm lint`,
+tests en los caminos críticos y el checklist del skill `seguridad`.
