@@ -37,3 +37,6 @@ pnpm-debug.log*
 
 # drizzle (los .sql versionados SÍ van; los snapshots de meta también)
 # (nada que ignorar acá por ahora)
+
+# Permisos locales de Claude Code (rutas de esta máquina)
+.claude/settings.json
