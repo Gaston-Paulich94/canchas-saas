@@ -24,6 +24,8 @@ import {
   listPaymentsByReservation,
   updatePayment,
   cancelPendingPaymentsForReservation,
+  listPaymentsNeedingRefund,
+  type RefundablePayment,
 } from "@/modules/payments/infrastructure/payment.repository";
 import { getMpAccessToken } from "@/modules/payments/infrastructure/mp-credentials";
 import {
@@ -58,6 +60,19 @@ function notificationUrlFor(paymentId: string): string {
   const url = new URL("/api/mp/webhooks/payment", env.APP_PUBLIC_URL);
   url.searchParams.set("payment_ref", paymentId);
   return url.toString();
+}
+
+/**
+ * Pagos que hay que devolver (cobros anulados que igual se pagaron). El
+ * reembolso se hace desde la cuenta de Mercado Pago del complejo.
+ */
+export async function getPaymentsNeedingRefund(
+  ctx: SessionContext,
+): Promise<RefundablePayment[]> {
+  assertRole(ctx, MANAGE_ROLES);
+  return withTenant(ctx.tenantId, (tx) =>
+    listPaymentsNeedingRefund(tx, ctx.tenantId),
+  );
 }
 
 export async function getReservationPayments(

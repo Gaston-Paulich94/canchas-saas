@@ -21,6 +21,7 @@ import { getReservationPayments } from "@/modules/payments/application/payment-s
 import {
   PAYMENT_STATUS_LABELS,
   formatArs,
+  needsRefund,
 } from "@/modules/payments/domain/payment";
 import { CancelReservationButton } from "@/components/reservations/cancel-reservation-button";
 import { RescheduleForm } from "@/components/reservations/reschedule-form";
@@ -150,6 +151,21 @@ export default async function ReservaDetallePage({
           ) : null}
         </CardContent>
       </Card>
+
+      {/* Fuera del bloque de reserva activa: es justo cuando se cancela que
+          un pago tardío puede aparecer. */}
+      {payments.filter(needsRefund).map((p) => (
+        <p
+          key={p.id}
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm"
+        >
+          Se recibió un pago de {formatArs(p.amountCents)}
+          {p.mpPaymentId ? ` (Mercado Pago #${p.mpPaymentId})` : ""} por un
+          cobro que ya estaba anulado. Hay que devolverlo desde la cuenta de
+          Mercado Pago del complejo.
+        </p>
+      ))}
 
       {isActive ? (
         <>

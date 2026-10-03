@@ -1,8 +1,10 @@
-import { and, eq, inArray, desc, sql } from "drizzle-orm";
+import { and, eq, inArray, desc, isNotNull, sql } from "drizzle-orm";
 import type { DbTx } from "@/modules/shared/infrastructure/db/client";
 import { db } from "@/modules/shared/infrastructure/db/client";
 import {
   payments,
+  reservations,
+  courts,
   type Payment,
   type NewPayment,
 } from "@/modules/shared/infrastructure/db/schema";
@@ -111,6 +113,72 @@ export async function cancelPendingPaymentsForReservation(
   return rows
     .map((r) => r.mpPreferenceId)
     .filter((id): id is string => id !== null);
+}
+
+/** Pago recibido que hay que devolver, con el contexto para identificarlo. */
+export interface RefundablePayment {
+  id: string;
+  reservationId: string;
+  amountCents: number;
+  paidAt: Date;
+  mpPaymentId: string | null;
+  customerName: string;
+  courtName: string;
+  startsAt: Date;
+}
+
+/**
+ * Pagos a devolver: cobros anulados (o de reservas canceladas) que igual se
+ * pagaron. Misma condición que `needsRefund` del dominio:
+ * status = 'cancelado' Y paid_at no nulo.
+ */
+export async function listPaymentsNeedingRefund(
+  tx: DbTx,
+  tenantId: string,
+): Promise<RefundablePayment[]> {
+  const rows = await tx
+    .select({
+      id: payments.id,
+      reservationId: payments.reservationId,
+      amountCents: payments.amountCents,
+      paidAt: payments.paidAt,
+      mpPaymentId: payments.mpPaymentId,
+      customerName: reservations.customerName,
+      courtName: courts.name,
+      startsAt: reservations.startsAt,
+    })
+    .from(payments)
+    .innerJoin(reservations, eq(reservations.id, payments.reservationId))
+    .innerJoin(courts, eq(courts.id, reservations.courtId))
+    .where(
+      and(
+        eq(payments.tenantId, tenantId),
+        eq(payments.status, "cancelado"),
+        isNotNull(payments.paidAt),
+      ),
+    )
+    .orderBy(desc(payments.paidAt));
+
+  // paid_at no es nulo por el WHERE; el tipo de Drizzle no lo sabe.
+  return rows.map((r) => ({ ...r, paidAt: r.paidAt as Date }));
+}
+
+/** Cuántos pagos hay que devolver (para el aviso del panel). */
+export async function countPaymentsNeedingRefund(
+  tx: DbTx,
+  tenantId: string,
+): Promise<number> {
+  const rows = await tx
+    .select({ total: sql<number>`count(*)::int` })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.tenantId, tenantId),
+        eq(payments.status, "cancelado"),
+        isNotNull(payments.paidAt),
+      ),
+    );
+  return rows[0]?.total ?? 0;
 }
 
 /**

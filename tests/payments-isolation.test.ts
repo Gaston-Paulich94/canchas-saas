@@ -8,6 +8,8 @@ import {
   findActivePaymentByReservation,
   updatePayment,
   cancelPendingPaymentsForReservation,
+  listPaymentsNeedingRefund,
+  countPaymentsNeedingRefund,
 } from "@/modules/payments/infrastructure/payment.repository";
 import { arDateTimeToUtc } from "@/modules/reservations/domain/datetime";
 import { isUniqueViolation } from "@/modules/shared/infrastructure/db/pg-errors";
@@ -317,6 +319,43 @@ describe("Pagos — aislamiento, idempotencia y anti doble cobro", () => {
     expect(ids).toEqual([]);
     const [row] = await db.adminSql`select status from payments where id = ${paymentB}`;
     expect(row?.status).toBe("pendiente");
+  });
+
+  it("pagos a devolver: solo cancelados CON pago, y solo del propio complejo", async () => {
+    const r = randomUUID();
+    const rB = randomUUID();
+    await db.adminSql`insert into "reservations"
+      (id, tenant_id, court_id, starts_at, ends_at, customer_name) values
+      (${r}, ${tenantA}, ${courtA}, ${arDateTimeToUtc(D, "06:00")}, ${arDateTimeToUtc(D, "07:00")}, 'Cliente a devolver')`;
+    await db.adminSql`insert into "reservations"
+      (id, tenant_id, court_id, starts_at, ends_at, customer_name) values
+      (${rB}, ${tenantB}, ${courtB}, ${arDateTimeToUtc(D, "06:00")}, ${arDateTimeToUtc(D, "07:00")}, 'Cliente de B')`;
+
+    const aDevolver = randomUUID();
+    const anuladoSinPago = randomUUID();
+    const deB = randomUUID();
+    await db.adminSql`insert into "payments"
+      (id, tenant_id, reservation_id, amount_cents, status, mp_payment_id, paid_at) values
+      (${aDevolver}, ${tenantA}, ${r}, 1500000, 'cancelado', 'mp-devolver', now()),
+      (${anuladoSinPago}, ${tenantA}, ${r}, 1500000, 'cancelado', null, null),
+      (${deB}, ${tenantB}, ${rB}, 2000000, 'cancelado', 'mp-de-b', now())`;
+
+    const lista = await asTenant(tenantA, (tx) => listPaymentsNeedingRefund(tx, tenantA));
+    const ids = lista.map((x) => x.id);
+    expect(ids).toContain(aDevolver);
+    expect(ids).not.toContain(anuladoSinPago); // anulado normal: no hay plata
+    expect(ids).not.toContain(deB); // de otro complejo
+
+    const fila = lista.find((x) => x.id === aDevolver);
+    expect(fila?.customerName).toBe("Cliente a devolver");
+    expect(fila?.courtName).toBe("Cancha A1");
+    expect(fila?.amountCents).toBe(1_500_000);
+
+    // El contador coincide con la lista y tampoco cruza complejos.
+    const totalA = await asTenant(tenantA, (tx) => countPaymentsNeedingRefund(tx, tenantA));
+    expect(totalA).toBe(lista.length);
+    const listaB = await asTenant(tenantB, (tx) => listPaymentsNeedingRefund(tx, tenantB));
+    expect(listaB.map((x) => x.id)).toEqual([deB]);
   });
 
   // ── Función de resolución del webhook ──────────────────────────────────────

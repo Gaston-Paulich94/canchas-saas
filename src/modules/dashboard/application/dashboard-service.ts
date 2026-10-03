@@ -3,6 +3,7 @@ import { assertRole } from "@/modules/shared/application/authz";
 import { ROLES, type SessionContext } from "@/modules/auth/domain/roles";
 import { arDayBounds } from "@/modules/reservations/domain/datetime";
 import { getMpConnectionStatus } from "@/modules/payments/infrastructure/mp-credentials";
+import { countPaymentsNeedingRefund } from "@/modules/payments/infrastructure/payment.repository";
 import type {
   DashboardAlert,
   DashboardOverview,
@@ -31,8 +32,24 @@ export function buildAlerts(input: {
   sinDisponibilidad: number;
   mpConectado: boolean;
   esOwner: boolean;
+  /** Pagos recibidos de cobros anulados que hay que devolver. */
+  pagosADevolver: number;
 }): DashboardAlert[] {
   const alerts: DashboardAlert[] = [];
+
+  // Plata de un cliente que hay que devolver: va primero. Solo al dueño, que es
+  // quien puede reembolsar desde la cuenta de Mercado Pago.
+  if (input.pagosADevolver > 0 && input.esOwner) {
+    alerts.push({
+      id: "pagos-a-devolver",
+      mensaje:
+        input.pagosADevolver === 1
+          ? "Recibiste 1 pago de un cobro anulado o de una reserva cancelada: hay que devolverlo."
+          : `Recibiste ${input.pagosADevolver} pagos de cobros anulados o reservas canceladas: hay que devolverlos.`,
+      href: "/dashboard/pagos",
+      cta: "Ver pagos",
+    });
+  }
 
   if (input.canchasTotales === 0) {
     alerts.push({
@@ -94,7 +111,7 @@ export async function getDashboardOverview(
   const since = now > from && now < to ? now : from;
 
   return withTenant(ctx.tenantId, async (tx) => {
-    const [counts, proximos, pagos, canchas, sinDisponibilidad, mp] =
+    const [counts, proximos, pagos, canchas, sinDisponibilidad, mp, aDevolver] =
       await Promise.all([
         getReservationDayCounts(tx, ctx.tenantId, from, to),
         listUpcomingReservations(tx, ctx.tenantId, since, to),
@@ -102,6 +119,7 @@ export async function getDashboardOverview(
         getCourtCounts(tx, ctx.tenantId),
         countCourtsWithoutAvailability(tx, ctx.tenantId),
         getMpConnectionStatus(tx, ctx.tenantId),
+        countPaymentsNeedingRefund(tx, ctx.tenantId),
       ]);
 
     return {
@@ -119,6 +137,7 @@ export async function getDashboardOverview(
         sinDisponibilidad,
         mpConectado: mp.connected,
         esOwner: ctx.role === ROLES.OWNER,
+        pagosADevolver: aDevolver,
       }),
       canchasActivas: canchas.activas,
       canchasTotales: canchas.totales,

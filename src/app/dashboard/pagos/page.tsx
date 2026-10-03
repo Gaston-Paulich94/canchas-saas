@@ -3,6 +3,12 @@ import { redirect } from "next/navigation";
 import { getSessionContext } from "@/modules/auth/application/session-context";
 import { ROLES } from "@/modules/auth/domain/roles";
 import { getConnectionStatus } from "@/modules/payments/application/mp-connection";
+import { getPaymentsNeedingRefund } from "@/modules/payments/application/payment-service";
+import { formatArs } from "@/modules/payments/domain/payment";
+import {
+  utcToArDate,
+  utcToArTime,
+} from "@/modules/reservations/domain/datetime";
 import {
   ConnectMpButton,
   DisconnectMpButton,
@@ -27,6 +33,7 @@ export default async function PagosPage({
   }
 
   const status = await getConnectionStatus(ctx);
+  const aDevolver = await getPaymentsNeedingRefund(ctx);
   const { conexion } = await searchParams;
   const isOwner = ctx.role === ROLES.OWNER;
 
@@ -90,6 +97,45 @@ export default async function PagosPage({
           )}
         </CardContent>
       </Card>
+
+      {aDevolver.length > 0 ? (
+        <Card className="border-destructive/40">
+          <CardHeader>
+            <CardTitle className="text-base">Pagos a devolver</CardTitle>
+            <CardDescription>
+              Se pagaron después de anular el cobro o de cancelar la reserva.
+              No se reembolsan solos: devolvelos desde tu cuenta de Mercado
+              Pago y acá se van a actualizar automáticamente.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="grid gap-2">
+              {aDevolver.map((p) => (
+                <li key={p.id}>
+                  <Link
+                    href={`/dashboard/reservas/${p.reservationId}`}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm transition-colors hover:bg-accent"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">
+                        {p.customerName}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {p.courtName} · {utcToArDate(p.startsAt)}{" "}
+                        {utcToArTime(p.startsAt)}
+                        {p.mpPaymentId ? ` · MP #${p.mpPaymentId}` : ""}
+                      </span>
+                    </span>
+                    <span className="font-medium tabular-nums">
+                      {formatArs(p.amountCents)}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
