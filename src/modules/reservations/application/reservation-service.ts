@@ -34,6 +34,10 @@ import {
   cancelReservation as cancelReservationRow,
 } from "@/modules/reservations/infrastructure/reservation.repository";
 import { findOrCreateCustomerTx } from "@/modules/customers/application/customer-service";
+import {
+  cancelReservationPaymentsTx,
+  expirePaymentLinks,
+} from "@/modules/payments/application/payment-service";
 
 /**
  * Use-cases de reservas. Reglas transversales:
@@ -155,16 +159,32 @@ export async function rescheduleReservation(
   });
 }
 
+/**
+ * Cancela una reserva y, en la MISMA transacción, anula sus cobros pendientes:
+ * una reserva cancelada no debe poder pagarse. Después vence los links en MP.
+ * Los cobros ya aprobados no se tocan (qué hacer con esa plata es política
+ * del complejo).
+ */
 export async function cancelReservation(
   ctx: SessionContext,
   id: string,
 ): Promise<Reservation> {
   assertRole(ctx, MANAGE_ROLES);
-  const cancelled = await withTenant(ctx.tenantId, (tx) =>
-    cancelReservationRow(tx, ctx.tenantId, id),
-  );
-  if (!cancelled) throw new ReservationNotFoundError();
-  return cancelled;
+  const result = await withTenant(ctx.tenantId, async (tx) => {
+    const cancelled = await cancelReservationRow(tx, ctx.tenantId, id);
+    if (!cancelled) return null;
+    const preferenceIds = await cancelReservationPaymentsTx(
+      tx,
+      ctx.tenantId,
+      id,
+    );
+    return { cancelled, preferenceIds };
+  });
+  if (!result) throw new ReservationNotFoundError();
+
+  // Fuera de la transacción: best-effort (si falla, lo cubre el webhook).
+  await expirePaymentLinks(ctx.tenantId, result.preferenceIds);
+  return result.cancelled;
 }
 
 export async function getReservation(

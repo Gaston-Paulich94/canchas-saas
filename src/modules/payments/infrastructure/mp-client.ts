@@ -159,6 +159,37 @@ export async function createPreference(
   return { id: parsed.data.id, initPoint: parsed.data.init_point };
 }
 
+/** Fecha en el formato que espera MP, con offset de Argentina (-03:00). */
+function toMpDate(date: Date): string {
+  const AR_OFFSET_MS = 3 * 60 * 60 * 1000;
+  return new Date(date.getTime() - AR_OFFSET_MS)
+    .toISOString()
+    .replace("Z", "-03:00");
+}
+
+/**
+ * Vence una preferencia de Checkout Pro: a partir de `now` el link ya no se
+ * puede pagar. Se usa al anular un cobro o cancelar la reserva.
+ */
+export async function expirePreference(
+  accessToken: string,
+  preferenceId: string,
+  now: Date = new Date(),
+): Promise<void> {
+  // El id se valida antes de interpolarlo en la ruta (sin input libre en URLs).
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(preferenceId)) {
+    throw new MpApiError("Id de preferencia inválido.");
+  }
+  await mpFetch(`/checkout/preferences/${preferenceId}`, {
+    method: "PUT",
+    accessToken,
+    body: JSON.stringify({
+      expires: true,
+      expiration_date_to: toMpDate(now),
+    }),
+  });
+}
+
 export interface MpPaymentSnapshot {
   mpPaymentId: string;
   status: PaymentStatus;

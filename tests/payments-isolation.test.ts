@@ -7,6 +7,7 @@ import {
   findPaymentById,
   findActivePaymentByReservation,
   updatePayment,
+  cancelPendingPaymentsForReservation,
 } from "@/modules/payments/infrastructure/payment.repository";
 import { arDateTimeToUtc } from "@/modules/reservations/domain/datetime";
 import { isUniqueViolation } from "@/modules/shared/infrastructure/db/pg-errors";
@@ -276,6 +277,46 @@ describe("Pagos — aislamiento, idempotencia y anti doble cobro", () => {
     expect(updated?.status).toBe("cancelado");
     expect(updated?.mpPaymentId).toBe("mp-tardio");
     expect(updated && needsRefund(updated)).toBe(true);
+  });
+
+  it("cancelar la reserva anula SOLO sus cobros pendientes y devuelve los links a vencer", async () => {
+    const r1 = randomUUID();
+    const r2 = randomUUID();
+    await db.adminSql`insert into "reservations"
+      (id, tenant_id, court_id, starts_at, ends_at, customer_name) values
+      (${r1}, ${tenantA}, ${courtA}, ${arDateTimeToUtc(D, "08:00")}, ${arDateTimeToUtc(D, "09:00")}, 'A cancelar'),
+      (${r2}, ${tenantA}, ${courtA}, ${arDateTimeToUtc(D, "09:00")}, ${arDateTimeToUtc(D, "10:00")}, 'Otra')`;
+
+    const pendiente = await asTenant(tenantA, (tx) =>
+      insertPayment(tx, { tenantId: tenantA, reservationId: r1, amountCents: 1_200_000, feeCents: 0, mpPreferenceId: "pref-r1" }),
+    );
+    const rechazado = await asTenant(tenantA, (tx) =>
+      insertPayment(tx, { tenantId: tenantA, reservationId: r1, amountCents: 1_200_000, feeCents: 0, status: "rechazado" }),
+    );
+    const deOtraReserva = await asTenant(tenantA, (tx) =>
+      insertPayment(tx, { tenantId: tenantA, reservationId: r2, amountCents: 1_200_000, feeCents: 0, mpPreferenceId: "pref-r2" }),
+    );
+
+    const ids = await asTenant(tenantA, (tx) =>
+      cancelPendingPaymentsForReservation(tx, tenantA, r1),
+    );
+    expect(ids).toEqual(["pref-r1"]);
+
+    const [p1] = await db.adminSql`select status from payments where id = ${pendiente.id}`;
+    const [p2] = await db.adminSql`select status from payments where id = ${rechazado.id}`;
+    const [p3] = await db.adminSql`select status from payments where id = ${deOtraReserva.id}`;
+    expect(p1?.status).toBe("cancelado");
+    expect(p2?.status).toBe("rechazado"); // no pendientes: intactos
+    expect(p3?.status).toBe("pendiente"); // otra reserva: intacta
+  });
+
+  it("IDOR: A no puede anular los cobros de una reserva de B", async () => {
+    const ids = await asTenant(tenantA, (tx) =>
+      cancelPendingPaymentsForReservation(tx, tenantA, reservationB),
+    );
+    expect(ids).toEqual([]);
+    const [row] = await db.adminSql`select status from payments where id = ${paymentB}`;
+    expect(row?.status).toBe("pendiente");
   });
 
   // ── Función de resolución del webhook ──────────────────────────────────────

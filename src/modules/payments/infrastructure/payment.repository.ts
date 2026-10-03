@@ -88,6 +88,32 @@ export async function updatePayment(
 }
 
 /**
+ * Anula los cobros PENDIENTES de una reserva (al cancelarla). Los aprobados no
+ * se tocan: qué hacer con esa plata es política del complejo. Devuelve los ids
+ * de preferencia de MP de los anulados, para vencer sus links.
+ */
+export async function cancelPendingPaymentsForReservation(
+  tx: DbTx,
+  tenantId: string,
+  reservationId: string,
+): Promise<string[]> {
+  const rows = await tx
+    .update(payments)
+    .set({ status: "cancelado" })
+    .where(
+      and(
+        eq(payments.tenantId, tenantId),
+        eq(payments.reservationId, reservationId),
+        eq(payments.status, "pendiente"),
+      ),
+    )
+    .returning({ mpPreferenceId: payments.mpPreferenceId });
+  return rows
+    .map((r) => r.mpPreferenceId)
+    .filter((id): id is string => id !== null);
+}
+
+/**
  * Resuelve a qué tenant pertenece un pago, para el webhook de MP (que llega sin
  * sesión). Usa la función SECURITY DEFINER `resolve_payment_tenant`, que
  * devuelve SOLO el tenant_id y nada más (ver migración 0011).
