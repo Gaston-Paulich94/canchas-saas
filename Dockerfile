@@ -14,7 +14,9 @@ WORKDIR /app
 
 # ── deps: instala dependencias con lockfile congelado ────────────────────────
 FROM base AS deps
-COPY package.json pnpm-lock.yaml ./
+# pnpm-workspace.yaml también: ahí viven los `overrides` y el `auditConfig`.
+# Sin ese archivo, `--frozen-lockfile` aborta por desajuste con el lockfile.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # ── builder: compila Next en modo standalone ─────────────────────────────────
