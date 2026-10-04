@@ -78,7 +78,12 @@ export default async function EditarCanchaPage({
         <CardHeader>
           <CardTitle className="text-base">Zona de peligro</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="grid gap-3">
+          <p className="text-sm text-muted-foreground">
+            Solo se pueden eliminar canchas sin reservas. Si ya tiene historial,
+            desmarcá &quot;Activa&quot; arriba: deja de ofrecerse y se conservan
+            sus reservas y cobros.
+          </p>
           <DeleteCourtButton courtId={court.id} />
         </CardContent>
       </Card>

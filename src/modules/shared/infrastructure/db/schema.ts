@@ -320,9 +320,14 @@ export const reservations = pgTable(
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
+    // NO ACTION (no cascade): borrar una cancha NO puede llevarse su historial
+    // de reservas ni, por arrastre, sus pagos. Para sacar de uso una cancha con
+    // historial está la baja lógica (is_active). Es NO ACTION y no RESTRICT a
+    // propósito: se verifica al final de la sentencia, así la baja completa de
+    // un tenant (que borra canchas y reservas en cascada) sigue funcionando.
     courtId: uuid("court_id")
       .notNull()
-      .references(() => courts.id, { onDelete: "cascade" }),
+      .references(() => courts.id, { onDelete: "no action" }),
     startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
     endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
     // El status lo decide SIEMPRE el servidor (nunca viene del payload).
@@ -373,9 +378,12 @@ export const payments = pgTable(
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
+    // NO ACTION: un pago es historial financiero y no se borra en cascada. Hoy
+    // la app nunca borra reservas (cancelar es baja lógica); esto lo garantiza
+    // la base aunque algún código futuro lo intente.
     reservationId: uuid("reservation_id")
       .notNull()
-      .references(() => reservations.id, { onDelete: "cascade" }),
+      .references(() => reservations.id, { onDelete: "no action" }),
 
     // Importes en CENTAVOS (enteros): nunca float para dinero. El monto lo
     // calcula el backend desde el precio de la cancha, jamás el cliente.
