@@ -1,14 +1,17 @@
 import { withTenant } from "@/modules/shared/infrastructure/db/with-tenant";
 import {
   findPaymentById,
+  findActivePaymentByReservation,
   updatePayment,
   resolvePaymentTenant,
 } from "@/modules/payments/infrastructure/payment.repository";
 import { getMpAccessToken } from "@/modules/payments/infrastructure/mp-credentials";
 import { getPayment } from "@/modules/payments/infrastructure/mp-client";
+import { findReservationById } from "@/modules/reservations/infrastructure/reservation.repository";
 import {
   PaymentNotFoundError,
   checkPaymentMatches,
+  decidePaymentUpdate,
   type PaymentMismatchReason,
 } from "@/modules/payments/domain/payment";
 
@@ -27,14 +30,18 @@ import {
  *  4. Se verifica que la notificación corresponda EXACTAMENTE a nuestro pago:
  *     misma referencia (obligatoria) Y mismo importe (y moneda, si viene). Si
  *     algo no coincide, NO se acredita: se descarta la notificación.
- *  5. Idempotencia: si ya está registrado ese mp_payment_id con el mismo
- *     estado, no se hace nada.
+ *  5. `decidePaymentUpdate` define el impacto. Si el cobro ya no estaba
+ *     vigente (anulado, reserva cancelada u otro link vivo), un pago que llega
+ *     NO lo reactiva: se registra como plata a devolver. Idempotente: la misma
+ *     notificación reenviada no cambia nada.
  */
 
 export interface NotificationResult {
   status: "actualizado" | "sin_cambios" | "ignorado";
   /** Por qué se descartó, cuando `status` es "ignorado". */
   motivo?: PaymentMismatchReason | "referencia_desconocida";
+  /** Se registró un pago tardío que hay que devolver. */
+  requiereReembolso?: boolean;
 }
 
 export async function processPaymentNotification(
@@ -67,20 +74,30 @@ export async function processPaymentNotification(
     );
     if (mismatch) return { status: "ignorado" as const, motivo: mismatch };
 
-    // Idempotencia: misma notificación reenviada => no-op.
-    if (
-      payment.mpPaymentId === snapshot.mpPaymentId &&
-      payment.status === snapshot.status
-    ) {
+    // ¿El cobro sigue vigente? Si no, un pago que llega es un pago tardío.
+    const reservation = await findReservationById(
+      tx,
+      tenantId,
+      payment.reservationId,
+    );
+    const activo = await findActivePaymentByReservation(
+      tx,
+      tenantId,
+      payment.reservationId,
+    );
+
+    const decision = decidePaymentUpdate(payment, snapshot, {
+      reservaCancelada: reservation?.status === "cancelada",
+      otroCobroActivo: activo !== null && activo.id !== payment.id,
+    });
+    if (decision.kind === "sin_cambios") {
       return { status: "sin_cambios" as const };
     }
 
-    await updatePayment(tx, tenantId, payment.id, {
-      mpPaymentId: snapshot.mpPaymentId,
-      status: snapshot.status,
-      paidAt: snapshot.status === "aprobado" ? (snapshot.approvedAt ?? new Date()) : null,
-    });
-
-    return { status: "actualizado" as const };
+    await updatePayment(tx, tenantId, payment.id, decision.patch);
+    return {
+      status: "actualizado" as const,
+      requiereReembolso: decision.requiereReembolso,
+    };
   });
 }

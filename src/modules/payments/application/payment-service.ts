@@ -23,9 +23,16 @@ import {
   findActivePaymentByReservation,
   listPaymentsByReservation,
   updatePayment,
+  cancelPendingPaymentsForReservation,
+  listPaymentsNeedingRefund,
+  type RefundablePayment,
 } from "@/modules/payments/infrastructure/payment.repository";
 import { getMpAccessToken } from "@/modules/payments/infrastructure/mp-credentials";
-import { createPreference } from "@/modules/payments/infrastructure/mp-client";
+import {
+  createPreference,
+  expirePreference,
+} from "@/modules/payments/infrastructure/mp-client";
+import type { DbTx } from "@/modules/shared/infrastructure/db/client";
 
 /**
  * Cobro de una reserva vía Checkout Pro (la plata cae en la cuenta del complejo,
@@ -53,6 +60,19 @@ function notificationUrlFor(paymentId: string): string {
   const url = new URL("/api/mp/webhooks/payment", env.APP_PUBLIC_URL);
   url.searchParams.set("payment_ref", paymentId);
   return url.toString();
+}
+
+/**
+ * Pagos que hay que devolver (cobros anulados que igual se pagaron). El
+ * reembolso se hace desde la cuenta de Mercado Pago del complejo.
+ */
+export async function getPaymentsNeedingRefund(
+  ctx: SessionContext,
+): Promise<RefundablePayment[]> {
+  assertRole(ctx, MANAGE_ROLES);
+  return withTenant(ctx.tenantId, (tx) =>
+    listPaymentsNeedingRefund(tx, ctx.tenantId),
+  );
 }
 
 export async function getReservationPayments(
@@ -174,13 +194,16 @@ export async function createPaymentLink(
   return { payment: updated, initPoint: preference.initPoint };
 }
 
-/** Cancela un pago pendiente (por ejemplo, si se cobró en efectivo). */
+/**
+ * Anula un cobro pendiente (por ejemplo, si se cobró en efectivo) y vence su
+ * link de Mercado Pago para que ya no se pueda pagar.
+ */
 export async function cancelPayment(
   ctx: SessionContext,
   paymentId: string,
 ): Promise<Payment> {
   assertRole(ctx, MANAGE_ROLES);
-  return withTenant(ctx.tenantId, async (tx) => {
+  const cancelled = await withTenant(ctx.tenantId, async (tx) => {
     const payment = await findPaymentById(tx, ctx.tenantId, paymentId);
     if (!payment) throw new PaymentNotFoundError();
     if (payment.status !== "pendiente") {
@@ -192,4 +215,59 @@ export async function cancelPayment(
     if (!updated) throw new PaymentNotFoundError();
     return updated;
   });
+
+  // Fuera de la transacción (nunca HTTP dentro de una tx de DB).
+  if (cancelled.mpPreferenceId) {
+    await expirePaymentLinks(ctx.tenantId, [cancelled.mpPreferenceId]);
+  }
+  return cancelled;
+}
+
+/**
+ * Anula, DENTRO de una transacción ya scopeada, los cobros pendientes de una
+ * reserva. La usa la cancelación de reservas para que reserva y cobros cambien
+ * juntos. Devuelve los ids de preferencia a vencer con `expirePaymentLinks`.
+ */
+export function cancelReservationPaymentsTx(
+  tx: DbTx,
+  tenantId: string,
+  reservationId: string,
+): Promise<string[]> {
+  return cancelPendingPaymentsForReservation(tx, tenantId, reservationId);
+}
+
+/**
+ * Vence en Mercado Pago los links de cobros ya anulados.
+ *
+ * Es BEST-EFFORT a propósito: si MP no responde, la anulación local ya está
+ * hecha y no se revierte. Si alguien llega a pagar un link que no se pudo
+ * vencer, el webhook lo registra como pago tardío a devolver
+ * (`decidePaymentUpdate`), así que el fallo nunca deja plata sin rastro.
+ */
+export async function expirePaymentLinks(
+  tenantId: string,
+  preferenceIds: string[],
+): Promise<{ vencidos: number; fallidos: number }> {
+  if (preferenceIds.length === 0) return { vencidos: 0, fallidos: 0 };
+
+  let accessToken: string;
+  try {
+    accessToken = await withTenant(tenantId, (tx) =>
+      getMpAccessToken(tx, tenantId),
+    );
+  } catch {
+    // Sin cuenta conectada no hay links que vencer desde acá.
+    return { vencidos: 0, fallidos: preferenceIds.length };
+  }
+
+  let vencidos = 0;
+  for (const id of preferenceIds) {
+    try {
+      await expirePreference(accessToken, id);
+      vencidos++;
+    } catch {
+      /* best-effort: lo cubre el webhook */
+    }
+  }
+  return { vencidos, fallidos: preferenceIds.length - vencidos };
 }

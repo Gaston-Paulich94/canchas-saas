@@ -12,6 +12,7 @@ const base = {
   sinDisponibilidad: 0,
   mpConectado: true,
   esOwner: true,
+  pagosADevolver: 0,
 };
 
 function ids(alerts: ReturnType<typeof buildAlerts>): string[] {
@@ -63,6 +64,19 @@ describe("Avisos del panel", () => {
   it("prioriza disponibilidad sobre precio (primero poder reservar)", () => {
     const alerts = buildAlerts({ ...base, sinPrecio: 1, sinDisponibilidad: 1 });
     expect(ids(alerts)).toEqual(["sin-disponibilidad", "sin-precio"]);
+  });
+
+  it("avisa al dueño los pagos a devolver, PRIMERO (es plata de un cliente)", () => {
+    const alerts = buildAlerts({ ...base, pagosADevolver: 2, sinPrecio: 1 });
+    expect(alerts[0]?.id).toBe("pagos-a-devolver");
+    expect(alerts[0]?.mensaje).toContain("2 pagos");
+    expect(alerts[0]?.href).toBe("/dashboard/pagos");
+  });
+
+  it("el aviso de pagos a devolver no se le muestra al staff (no puede reembolsar)", () => {
+    expect(
+      ids(buildAlerts({ ...base, pagosADevolver: 1, esOwner: false })),
+    ).not.toContain("pagos-a-devolver");
   });
 
   it("cada aviso trae link y llamada a la acción", () => {

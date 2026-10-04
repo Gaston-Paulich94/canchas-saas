@@ -7,9 +7,16 @@ import {
   findPaymentById,
   findActivePaymentByReservation,
   updatePayment,
+  cancelPendingPaymentsForReservation,
+  listPaymentsNeedingRefund,
+  countPaymentsNeedingRefund,
 } from "@/modules/payments/infrastructure/payment.repository";
 import { arDateTimeToUtc } from "@/modules/reservations/domain/datetime";
 import { isUniqueViolation } from "@/modules/shared/infrastructure/db/pg-errors";
+import {
+  decidePaymentUpdate,
+  needsRefund,
+} from "@/modules/payments/domain/payment";
 
 /**
  * Pagos contra Postgres real con el rol app_user (respeta RLS):
@@ -222,6 +229,133 @@ describe("Pagos — aislamiento, idempotencia y anti doble cobro", () => {
       }),
     );
     expect(created.tenantId).toBe(tenantB);
+  });
+
+  it("pago tardío (regresión): reactivarlo chocaba con el índice; el patch decidido no", async () => {
+    const r = randomUUID();
+    await db.adminSql`insert into "reservations"
+      (id, tenant_id, court_id, starts_at, ends_at, customer_name) values
+      (${r}, ${tenantA}, ${courtA},
+       ${arDateTimeToUtc(D, "22:00")}, ${arDateTimeToUtc(D, "23:00")}, 'Pago tardío')`;
+
+    // El operador anuló el primer link y generó uno nuevo.
+    const viejo = await asTenant(tenantA, (tx) =>
+      insertPayment(tx, {
+        tenantId: tenantA,
+        reservationId: r,
+        amountCents: 1_200_000,
+        feeCents: 0,
+        status: "cancelado",
+      }),
+    );
+    await asTenant(tenantA, (tx) =>
+      insertPayment(tx, { tenantId: tenantA, reservationId: r, amountCents: 1_200_000, feeCents: 0 }),
+    );
+
+    // Lo que hacía el webhook antes: pasar el link viejo a "aprobado" => 23505,
+    // la ruta devolvía 500 y MP reintentaba para siempre.
+    await expect(
+      asTenant(tenantA, (tx) =>
+        updatePayment(tx, tenantA, viejo.id, {
+          status: "aprobado",
+          mpPaymentId: "mp-tardio",
+          paidAt: new Date(),
+        }),
+      ),
+    ).rejects.toSatisfy(isUniqueViolation);
+
+    // Lo que decide ahora: registrarlo como plata a devolver, sin reactivarlo.
+    const decision = decidePaymentUpdate(
+      viejo,
+      { status: "aprobado", mpPaymentId: "mp-tardio", approvedAt: new Date() },
+      { reservaCancelada: false, otroCobroActivo: true },
+    );
+    expect(decision.kind).toBe("actualizar");
+    if (decision.kind !== "actualizar") return;
+
+    const updated = await asTenant(tenantA, (tx) =>
+      updatePayment(tx, tenantA, viejo.id, decision.patch),
+    );
+    expect(updated?.status).toBe("cancelado");
+    expect(updated?.mpPaymentId).toBe("mp-tardio");
+    expect(updated && needsRefund(updated)).toBe(true);
+  });
+
+  it("cancelar la reserva anula SOLO sus cobros pendientes y devuelve los links a vencer", async () => {
+    const r1 = randomUUID();
+    const r2 = randomUUID();
+    await db.adminSql`insert into "reservations"
+      (id, tenant_id, court_id, starts_at, ends_at, customer_name) values
+      (${r1}, ${tenantA}, ${courtA}, ${arDateTimeToUtc(D, "08:00")}, ${arDateTimeToUtc(D, "09:00")}, 'A cancelar'),
+      (${r2}, ${tenantA}, ${courtA}, ${arDateTimeToUtc(D, "09:00")}, ${arDateTimeToUtc(D, "10:00")}, 'Otra')`;
+
+    const pendiente = await asTenant(tenantA, (tx) =>
+      insertPayment(tx, { tenantId: tenantA, reservationId: r1, amountCents: 1_200_000, feeCents: 0, mpPreferenceId: "pref-r1" }),
+    );
+    const rechazado = await asTenant(tenantA, (tx) =>
+      insertPayment(tx, { tenantId: tenantA, reservationId: r1, amountCents: 1_200_000, feeCents: 0, status: "rechazado" }),
+    );
+    const deOtraReserva = await asTenant(tenantA, (tx) =>
+      insertPayment(tx, { tenantId: tenantA, reservationId: r2, amountCents: 1_200_000, feeCents: 0, mpPreferenceId: "pref-r2" }),
+    );
+
+    const ids = await asTenant(tenantA, (tx) =>
+      cancelPendingPaymentsForReservation(tx, tenantA, r1),
+    );
+    expect(ids).toEqual(["pref-r1"]);
+
+    const [p1] = await db.adminSql`select status from payments where id = ${pendiente.id}`;
+    const [p2] = await db.adminSql`select status from payments where id = ${rechazado.id}`;
+    const [p3] = await db.adminSql`select status from payments where id = ${deOtraReserva.id}`;
+    expect(p1?.status).toBe("cancelado");
+    expect(p2?.status).toBe("rechazado"); // no pendientes: intactos
+    expect(p3?.status).toBe("pendiente"); // otra reserva: intacta
+  });
+
+  it("IDOR: A no puede anular los cobros de una reserva de B", async () => {
+    const ids = await asTenant(tenantA, (tx) =>
+      cancelPendingPaymentsForReservation(tx, tenantA, reservationB),
+    );
+    expect(ids).toEqual([]);
+    const [row] = await db.adminSql`select status from payments where id = ${paymentB}`;
+    expect(row?.status).toBe("pendiente");
+  });
+
+  it("pagos a devolver: solo cancelados CON pago, y solo del propio complejo", async () => {
+    const r = randomUUID();
+    const rB = randomUUID();
+    await db.adminSql`insert into "reservations"
+      (id, tenant_id, court_id, starts_at, ends_at, customer_name) values
+      (${r}, ${tenantA}, ${courtA}, ${arDateTimeToUtc(D, "06:00")}, ${arDateTimeToUtc(D, "07:00")}, 'Cliente a devolver')`;
+    await db.adminSql`insert into "reservations"
+      (id, tenant_id, court_id, starts_at, ends_at, customer_name) values
+      (${rB}, ${tenantB}, ${courtB}, ${arDateTimeToUtc(D, "06:00")}, ${arDateTimeToUtc(D, "07:00")}, 'Cliente de B')`;
+
+    const aDevolver = randomUUID();
+    const anuladoSinPago = randomUUID();
+    const deB = randomUUID();
+    await db.adminSql`insert into "payments"
+      (id, tenant_id, reservation_id, amount_cents, status, mp_payment_id, paid_at) values
+      (${aDevolver}, ${tenantA}, ${r}, 1500000, 'cancelado', 'mp-devolver', now()),
+      (${anuladoSinPago}, ${tenantA}, ${r}, 1500000, 'cancelado', null, null),
+      (${deB}, ${tenantB}, ${rB}, 2000000, 'cancelado', 'mp-de-b', now())`;
+
+    const lista = await asTenant(tenantA, (tx) => listPaymentsNeedingRefund(tx, tenantA));
+    const ids = lista.map((x) => x.id);
+    expect(ids).toContain(aDevolver);
+    expect(ids).not.toContain(anuladoSinPago); // anulado normal: no hay plata
+    expect(ids).not.toContain(deB); // de otro complejo
+
+    const fila = lista.find((x) => x.id === aDevolver);
+    expect(fila?.customerName).toBe("Cliente a devolver");
+    expect(fila?.courtName).toBe("Cancha A1");
+    expect(fila?.amountCents).toBe(1_500_000);
+
+    // El contador coincide con la lista y tampoco cruza complejos.
+    const totalA = await asTenant(tenantA, (tx) => countPaymentsNeedingRefund(tx, tenantA));
+    expect(totalA).toBe(lista.length);
+    const listaB = await asTenant(tenantB, (tx) => listPaymentsNeedingRefund(tx, tenantB));
+    expect(listaB.map((x) => x.id)).toEqual([deB]);
   });
 
   // ── Función de resolución del webhook ──────────────────────────────────────
