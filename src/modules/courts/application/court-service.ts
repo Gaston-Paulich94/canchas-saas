@@ -1,10 +1,14 @@
 import { withTenant } from "@/modules/shared/infrastructure/db/with-tenant";
-import { isUniqueViolation } from "@/modules/shared/infrastructure/db/pg-errors";
+import {
+  isUniqueViolation,
+  isForeignKeyViolation,
+} from "@/modules/shared/infrastructure/db/pg-errors";
 import { assertRole } from "@/modules/shared/application/authz";
 import { ROLES, type SessionContext } from "@/modules/auth/domain/roles";
 import {
   CourtNotFoundError,
   CourtNameTakenError,
+  CourtHasHistoryError,
   type Court,
 } from "@/modules/courts/domain/court";
 import type { CourtInput } from "@/modules/courts/domain/schemas";
@@ -90,13 +94,24 @@ export async function editCourt(
   }
 }
 
+/**
+ * Borra una cancha SIN historial. Si tiene reservas, la base lo impide (FK sin
+ * cascada, migración 0014) y se informa que hay que desactivarla: borrarla se
+ * llevaba en cascada todas sus reservas y sus pagos.
+ */
 export async function removeCourt(
   ctx: SessionContext,
   id: string,
 ): Promise<void> {
   assertRole(ctx, MANAGE_ROLES);
-  const deleted = await withTenant(ctx.tenantId, (tx) =>
-    deleteCourt(tx, ctx.tenantId, id),
-  );
+  let deleted: boolean;
+  try {
+    deleted = await withTenant(ctx.tenantId, (tx) =>
+      deleteCourt(tx, ctx.tenantId, id),
+    );
+  } catch (err) {
+    if (isForeignKeyViolation(err)) throw new CourtHasHistoryError();
+    throw err;
+  }
   if (!deleted) throw new CourtNotFoundError();
 }

@@ -19,6 +19,7 @@ import {
 import {
   CourtNotFoundError,
   CourtNameTakenError,
+  CourtHasHistoryError,
 } from "@/modules/courts/domain/court";
 
 export interface ActionState {
@@ -48,6 +49,7 @@ function readCourtForm(formData: FormData): Record<string, unknown> {
 /** Traduce cualquier error a un mensaje seguro para el cliente (sin stack). */
 function toActionError(err: unknown): string {
   if (err instanceof CourtNameTakenError) return err.message;
+  if (err instanceof CourtHasHistoryError) return err.message;
   if (err instanceof CourtNotFoundError) return err.message;
   if (err instanceof AuthorizationError) {
     return "No tenés permiso para administrar canchas.";

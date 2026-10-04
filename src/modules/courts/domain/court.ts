@@ -40,3 +40,16 @@ export class CourtNameTakenError extends Error {
     this.name = "CourtNameTakenError";
   }
 }
+
+/**
+ * La cancha tiene reservas (historial y, quizás, pagos): no se puede borrar.
+ * El mensaje propone la salida correcta, que es desactivarla.
+ */
+export class CourtHasHistoryError extends Error {
+  constructor() {
+    super(
+      "Esta cancha tiene reservas registradas y no se puede eliminar sin perder el historial. Desactivala para que deje de ofrecerse.",
+    );
+    this.name = "CourtHasHistoryError";
+  }
+}
