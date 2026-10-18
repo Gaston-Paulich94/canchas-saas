@@ -31,6 +31,8 @@ export function buildAlerts(input: {
   sinPrecio: number;
   sinDisponibilidad: number;
   mpConectado: boolean;
+  /** Conectada pero con la autorización vencida: no cobra ni acredita. */
+  mpVencido: boolean;
   esOwner: boolean;
   /** Pagos recibidos de cobros anulados que hay que devolver. */
   pagosADevolver: number;
@@ -48,6 +50,18 @@ export function buildAlerts(input: {
           : `Recibiste ${input.pagosADevolver} pagos de cobros anulados o reservas canceladas: hay que devolverlos.`,
       href: "/dashboard/pagos",
       cta: "Ver pagos",
+    });
+  }
+
+  // Sin esto los cobros fallan y los pagos que entran no se acreditan: va
+  // segundo, solo detrás de la plata a devolver. Al dueño, que puede reconectar.
+  if (input.mpVencido && input.esOwner) {
+    alerts.push({
+      id: "mp-vencido",
+      mensaje:
+        "La conexión con Mercado Pago venció: no se pueden cobrar reservas ni acreditar pagos hasta reconectarla.",
+      href: "/dashboard/pagos",
+      cta: "Reconectar",
     });
   }
 
@@ -136,6 +150,7 @@ export async function getDashboardOverview(
         sinPrecio: canchas.sinPrecio,
         sinDisponibilidad,
         mpConectado: mp.connected,
+        mpVencido: mp.expired,
         esOwner: ctx.role === ROLES.OWNER,
         pagosADevolver: aDevolver,
       }),
