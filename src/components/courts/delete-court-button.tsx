@@ -7,13 +7,14 @@ import { Button } from "@/components/ui/button";
 const initialState: ActionState = { error: null };
 
 /**
- * Botón de baja de una cancha. El id se liga en el SERVIDOR (bind), no viaja en
- * un campo editable del form. Igual el service scopea por tenant: aun forzando
- * otro id, solo se puede borrar dentro del propio tenant (RLS + filtro app).
+ * Botón de baja de una cancha. El id viaja como campo oculto: el cliente lo controla, así que el service
+ * vuelve a verificar que pertenezca al complejo (tenant + id, más RLS).
  */
 export function DeleteCourtButton({ courtId }: { courtId: string }) {
-  const action = deleteCourtAction.bind(null, courtId);
-  const [state, formAction, pending] = useActionState(action, initialState);
+  const [state, formAction, pending] = useActionState(
+    deleteCourtAction,
+    initialState,
+  );
 
   return (
     <form
@@ -24,6 +25,7 @@ export function DeleteCourtButton({ courtId }: { courtId: string }) {
         }
       }}
     >
+      <input type="hidden" name="courtId" value={courtId} />
       <Button variant="destructive" type="submit" disabled={pending}>
         {pending ? "Eliminando…" : "Eliminar cancha"}
       </Button>

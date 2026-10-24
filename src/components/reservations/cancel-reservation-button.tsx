@@ -9,7 +9,10 @@ import { Button } from "@/components/ui/button";
 
 const initialState: ActionState = { error: null };
 
-/** Cancela una reserva. El id se liga en el SERVIDOR (bind), no viaja editable. */
+/**
+ * Cancela una reserva. El id viaja como campo oculto: el cliente lo controla, así que el service
+ * vuelve a verificar que pertenezca al complejo (tenant + id, más RLS).
+ */
 export function CancelReservationButton({
   reservationId,
   returnDate,
@@ -17,8 +20,10 @@ export function CancelReservationButton({
   reservationId: string;
   returnDate: string | null;
 }) {
-  const action = cancelReservationAction.bind(null, reservationId, returnDate);
-  const [state, formAction, pending] = useActionState(action, initialState);
+  const [state, formAction, pending] = useActionState(
+    cancelReservationAction,
+    initialState,
+  );
 
   return (
     <form
@@ -29,6 +34,8 @@ export function CancelReservationButton({
         }
       }}
     >
+      <input type="hidden" name="reservationId" value={reservationId} />
+      <input type="hidden" name="returnDate" value={returnDate ?? ""} />
       <Button variant="destructive" type="submit" disabled={pending}>
         {pending ? "Cancelando…" : "Cancelar reserva"}
       </Button>

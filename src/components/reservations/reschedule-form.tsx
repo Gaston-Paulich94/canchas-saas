@@ -13,8 +13,9 @@ import { NativeSelect } from "@/components/ui/native-select";
 const initialState: ActionState = { error: null };
 
 /**
- * Paso 2 de la modificación: elegir el nuevo turno libre. El id de la reserva
- * se liga en el servidor; courtId/date van hidden y el server revalida todo.
+ * Paso 2 de la modificación: elegir el nuevo turno libre. La reserva, la
+ * cancha destino y la fecha viajan como campos ocultos: el cliente los
+ * controla, así que el server revalida todo (tenant + id, turno válido).
  */
 export function RescheduleForm({
   reservationId,
@@ -27,8 +28,10 @@ export function RescheduleForm({
   date: string;
   freeSlots: Slot[];
 }) {
-  const action = rescheduleReservationAction.bind(null, reservationId);
-  const [state, formAction, pending] = useActionState(action, initialState);
+  const [state, formAction, pending] = useActionState(
+    rescheduleReservationAction,
+    initialState,
+  );
 
   if (freeSlots.length === 0) {
     return (
@@ -40,6 +43,7 @@ export function RescheduleForm({
 
   return (
     <form action={formAction} className="grid gap-4">
+      <input type="hidden" name="reservationId" value={reservationId} />
       <input type="hidden" name="courtId" value={courtId} />
       <input type="hidden" name="date" value={date} />
 

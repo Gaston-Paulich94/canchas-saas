@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { readIdField } from "@/lib/form-ids";
 import { requireSessionContext } from "@/modules/auth/application/session-context";
 import {
   UnauthenticatedError,
@@ -82,10 +83,11 @@ export async function createCourtAction(
 }
 
 export async function updateCourtAction(
-  id: string,
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const id = readIdField(formData, "courtId");
+  if (!id) return { error: "Cancha no encontrada." };
   const parsed = updateCourtSchema.safeParse(readCourtForm(formData));
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
@@ -103,10 +105,11 @@ export async function updateCourtAction(
 }
 
 export async function deleteCourtAction(
-  id: string,
   _prev: ActionState,
-  _formData: FormData,
+  formData: FormData,
 ): Promise<ActionState> {
+  const id = readIdField(formData, "courtId");
+  if (!id) return { error: "Cancha no encontrada." };
   try {
     const ctx = await requireSessionContext();
     await removeCourt(ctx, id);

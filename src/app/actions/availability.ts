@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { readIdField } from "@/lib/form-ids";
 import { requireSessionContext } from "@/modules/auth/application/session-context";
 import {
   UnauthenticatedError,
@@ -45,10 +46,11 @@ function toActionError(err: unknown): string {
 }
 
 export async function addAvailabilityAction(
-  courtId: string,
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const courtId = readIdField(formData, "courtId");
+  if (!courtId) return { error: "Cancha no encontrada." };
   const dayRaw = (formData.get("dayOfWeek") ?? "").toString().trim();
   const parsed = createAvailabilitySchema.safeParse({
     dayOfWeek: dayRaw === "" ? NaN : Number(dayRaw),
@@ -71,11 +73,12 @@ export async function addAvailabilityAction(
 }
 
 export async function removeAvailabilityAction(
-  courtId: string,
-  availabilityId: string,
   _prev: ActionState,
-  _formData: FormData,
+  formData: FormData,
 ): Promise<ActionState> {
+  const courtId = readIdField(formData, "courtId");
+  const availabilityId = readIdField(formData, "availabilityId");
+  if (!courtId || !availabilityId) return { error: "Franja horaria no encontrada." };
   try {
     const ctx = await requireSessionContext();
     await removeAvailability(ctx, availabilityId);
@@ -88,10 +91,11 @@ export async function removeAvailabilityAction(
 }
 
 export async function setSlotDurationAction(
-  courtId: string,
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const courtId = readIdField(formData, "courtId");
+  if (!courtId) return { error: "Cancha no encontrada." };
   const raw = (formData.get("slotDurationMin") ?? "").toString().trim();
   const parsed = slotDurationSchema.safeParse({
     slotDurationMin: raw === "" ? NaN : Number(raw),

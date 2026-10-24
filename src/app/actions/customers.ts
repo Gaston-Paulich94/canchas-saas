@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { readIdField } from "@/lib/form-ids";
 import { requireSessionContext } from "@/modules/auth/application/session-context";
 import {
   UnauthenticatedError,
@@ -74,10 +75,11 @@ export async function createCustomerAction(
 }
 
 export async function updateCustomerAction(
-  id: string,
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const id = readIdField(formData, "customerId");
+  if (!id) return { error: "Cliente no encontrado." };
   const parsed = updateCustomerSchema.safeParse(readCustomerForm(formData));
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
@@ -95,10 +97,11 @@ export async function updateCustomerAction(
 }
 
 export async function deleteCustomerAction(
-  id: string,
   _prev: ActionState,
-  _formData: FormData,
+  formData: FormData,
 ): Promise<ActionState> {
+  const id = readIdField(formData, "customerId");
+  if (!id) return { error: "Cliente no encontrado." };
   try {
     const ctx = await requireSessionContext();
     await removeCustomer(ctx, id);

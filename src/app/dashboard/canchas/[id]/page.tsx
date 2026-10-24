@@ -41,9 +41,6 @@ export default async function EditarCanchaPage({
     throw err;
   }
 
-  // id ligado en el servidor (no viaja como campo editable del form).
-  const action = updateCourtAction.bind(null, court.id);
-
   return (
     <main className="mx-auto flex min-h-screen max-w-lg flex-col gap-6 p-6">
       <Card>
@@ -52,7 +49,7 @@ export default async function EditarCanchaPage({
         </CardHeader>
         <CardContent>
           <CourtForm
-            action={action}
+            action={updateCourtAction}
             defaultValues={court}
             submitLabel="Guardar cambios"
             pendingLabel="Guardando…"
