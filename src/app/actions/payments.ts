@@ -18,6 +18,7 @@ import {
 } from "@/modules/payments/application/payment-service";
 import {
   MpNotConnectedError,
+  MpConnectionExpiredError,
   CourtPriceMissingError,
   PaymentAlreadyExistsError,
   ReservationNotPayableError,
@@ -35,6 +36,7 @@ const PAGOS_PATH = "/dashboard/pagos";
 
 function toActionError(err: unknown): string {
   if (err instanceof MpNotConnectedError) return err.message;
+  if (err instanceof MpConnectionExpiredError) return err.message;
   if (err instanceof CourtPriceMissingError) return err.message;
   if (err instanceof PaymentAlreadyExistsError) return err.message;
   if (err instanceof ReservationNotPayableError) return err.message;

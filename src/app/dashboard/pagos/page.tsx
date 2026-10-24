@@ -71,10 +71,37 @@ export default async function PagosPage({
         <CardContent className="grid gap-4">
           <div className="flex items-center justify-between gap-4 text-sm">
             <span className="text-muted-foreground">Estado</span>
-            <span className="font-medium">
-              {status.connected ? "Conectada" : "Sin conectar"}
+            <span
+              className={
+                status.expired ? "font-medium text-destructive" : "font-medium"
+              }
+            >
+              {!status.connected
+                ? "Sin conectar"
+                : status.expired
+                  ? "Vencida"
+                  : "Conectada"}
             </span>
           </div>
+          {status.connected && status.expiresAt && !status.expired ? (
+            <div className="flex items-center justify-between gap-4 text-sm">
+              <span className="text-muted-foreground">Autorización hasta</span>
+              <span className="font-medium tabular-nums">
+                {utcToArDate(status.expiresAt)}
+              </span>
+            </div>
+          ) : null}
+          {status.expired ? (
+            <p role="alert" className="text-sm text-destructive">
+              La autorización de Mercado Pago venció y no se pudo renovar sola:
+              no se pueden generar links ni acreditar pagos hasta reconectar la
+              cuenta.
+            </p>
+          ) : status.connected ? (
+            <p className="text-xs text-muted-foreground">
+              Se renueva automáticamente al usarla, antes de vencer.
+            </p>
+          ) : null}
           {status.connected && status.mpUserId ? (
             <div className="flex items-center justify-between gap-4 text-sm">
               <span className="text-muted-foreground">Cuenta</span>
@@ -85,9 +112,10 @@ export default async function PagosPage({
           ) : null}
 
           {isOwner ? (
-            status.connected ? (
+            status.connected && !status.expired ? (
               <DisconnectMpButton />
             ) : (
+              // Reconectar = volver a autorizar: el OAuth reemplaza los tokens.
               <ConnectMpButton />
             )
           ) : (

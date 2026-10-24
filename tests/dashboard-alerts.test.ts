@@ -11,6 +11,7 @@ const base = {
   sinPrecio: 0,
   sinDisponibilidad: 0,
   mpConectado: true,
+  mpVencido: false,
   esOwner: true,
   pagosADevolver: 0,
 };
@@ -77,6 +78,16 @@ describe("Avisos del panel", () => {
     expect(
       ids(buildAlerts({ ...base, pagosADevolver: 1, esOwner: false })),
     ).not.toContain("pagos-a-devolver");
+  });
+
+  it("avisa al dueño que la conexión con MP venció, detrás de los pagos a devolver", () => {
+    const alerts = buildAlerts({ ...base, mpVencido: true, pagosADevolver: 1, sinPrecio: 1 });
+    expect(ids(alerts).slice(0, 2)).toEqual(["pagos-a-devolver", "mp-vencido"]);
+    expect(alerts[1]?.cta).toBe("Reconectar");
+  });
+
+  it("el aviso de MP vencido no se le muestra al staff (no puede reconectar)", () => {
+    expect(ids(buildAlerts({ ...base, mpVencido: true, esOwner: false }))).not.toContain("mp-vencido");
   });
 
   it("cada aviso trae link y llamada a la acción", () => {

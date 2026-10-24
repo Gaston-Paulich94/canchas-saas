@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { DbTx } from "@/modules/shared/infrastructure/db/client";
 import {
   tenants,
@@ -53,4 +53,35 @@ export async function updateTenantMpCredentials(
     .where(eq(tenants.id, tenantId))
     .returning();
   return rows[0] ?? null;
+}
+
+/**
+ * Guarda tokens renovados SOLO si el refresh token guardado sigue siendo el que
+ * se usó para renovar (compare-and-swap). Si otro pedido renovó en paralelo, no
+ * se pisa su resultado: devuelve false y el llamador relee.
+ *
+ * El "valor esperado" es el texto cifrado: con IV aleatorio por cifrado, cada
+ * guardado produce un valor distinto, así que funciona como número de versión.
+ */
+export async function replaceMpTokensIfUnchanged(
+  tx: DbTx,
+  tenantId: string,
+  expectedRefreshTokenEnc: string,
+  data: {
+    mpAccessTokenEnc: string;
+    mpRefreshTokenEnc: string;
+    mpTokenExpiresAt: Date | null;
+  },
+): Promise<boolean> {
+  const rows = await tx
+    .update(tenants)
+    .set(data)
+    .where(
+      and(
+        eq(tenants.id, tenantId),
+        eq(tenants.mpRefreshTokenEnc, expectedRefreshTokenEnc),
+      ),
+    )
+    .returning({ id: tenants.id });
+  return rows.length > 0;
 }

@@ -15,6 +15,7 @@ import {
   exchangeCodeForTokens,
 } from "@/modules/payments/infrastructure/mp-client";
 import { MpApiError } from "@/modules/payments/domain/payment";
+import { expiresAtFrom } from "@/modules/payments/domain/mp-token";
 
 /**
  * Conexión de la cuenta de Mercado Pago de un complejo (OAuth marketplace).
@@ -93,9 +94,7 @@ export async function completeMpConnection(
 
   const tokens = await exchangeCodeForTokens(code, mpRedirectUri());
 
-  const expiresAt = tokens.expires_in
-    ? new Date(Date.now() + tokens.expires_in * 1000)
-    : null;
+  const expiresAt = expiresAtFrom(tokens.expires_in);
 
   await withTenant(ctx.tenantId, (tx) =>
     updateTenantMpCredentials(tx, ctx.tenantId, {
