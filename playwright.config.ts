@@ -1,10 +1,12 @@
+import "dotenv/config";
 import { defineConfig, devices } from "@playwright/test";
 
 /**
  * Tests end-to-end en navegador real (Chromium).
  *
  * Corren contra la app levantada con `pnpm dev` y los datos de `pnpm db:seed`
- * (usuarios dueno/staff/vecino@demo.test). Un solo worker: comparten la base
+ * (usuarios dueno/staff/vecino@demo.test, contraseña DEMO_PASSWORD de `.env`,
+ * que se carga acá para los tests). Un solo worker: comparten la base
  * de demo y el rate-limit de login, así que en paralelo se pisarían.
  *
  * Los tests unitarios y de integración siguen en Vitest (`tests/`); estos

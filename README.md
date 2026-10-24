@@ -104,8 +104,8 @@ Flujo: `/register` crea el complejo y su dueño → `/dashboard`.
 
 El seed arma "Complejo Demo" (3 canchas con horarios, clientes y reservas del
 mes) más un "Complejo Vecino" para comprobar el aislamiento. Usuarios:
-`dueno@demo.test`, `staff@demo.test` y `vecino@demo.test`, contraseña
-`Demo-Canchas-2026`. Solo corre contra una base local.
+`dueno@demo.test`, `staff@demo.test` y `vecino@demo.test`, con la contraseña
+que pongas en `DEMO_PASSWORD` (`.env`). Solo corre contra una base local.
 
 ## Comandos
 
@@ -119,7 +119,7 @@ mes) más un "Complejo Vecino" para comprobar el aislamiento. Usuarios:
 | `pnpm db:migrate` | aplica migraciones (rol admin) + crea `app_user` |
 | `pnpm db:seed` | datos de demo en local (`--reset` regenera) |
 | `pnpm test` | tests (Vitest + testcontainers) |
-| `pnpm test:e2e` | tests en navegador real (Playwright; necesita la base local con `pnpm db:seed`) |
+| `pnpm test:e2e` | tests en navegador real (Playwright; necesita la base local con `pnpm db:seed` y `DEMO_PASSWORD`) |
 
 > Los tests de integración levantan Postgres con **testcontainers**: necesitás
 > Docker corriendo.

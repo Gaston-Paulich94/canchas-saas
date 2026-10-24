@@ -60,7 +60,20 @@ import {
 
 // ── Credenciales de demo (SOLO local) ────────────────────────────────────────
 
-const DEMO_PASSWORD = "Demo-Canchas-2026";
+// La contraseña sale de `.env` y no del código: aunque sea de demo, una
+// credencial commiteada la marcan los escáneres de secretos y termina copiada
+// en otros entornos. Misma política de largo que la app.
+function readDemoPassword(): string {
+  const value = process.env.DEMO_PASSWORD ?? "";
+  if (value.length < 12 || value.length > 128) {
+    throw new Error(
+      "Definí DEMO_PASSWORD en .env (12 a 128 caracteres): es la contraseña de los usuarios de demo.",
+    );
+  }
+  return value;
+}
+
+const DEMO_PASSWORD = readDemoPassword();
 
 const DEMO_USERS = {
   owner: { name: "Dueño Demo", email: "dueno@demo.test" },
@@ -360,7 +373,7 @@ async function seedComplejoVecino(tenantId: string): Promise<void> {
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 function printCredentials(): void {
-  console.log("\nUsuarios de demo (contraseña para todos: " + DEMO_PASSWORD + ")");
+  console.log("\nUsuarios de demo (contraseña para todos: la de DEMO_PASSWORD en .env)");
   console.log("  Dueño   " + DEMO_USERS.owner.email + "   → Complejo Demo (acceso completo)");
   console.log("  Staff   " + DEMO_USERS.staff.email + "   → Complejo Demo (sin reportes ni conexión de MP)");
   console.log("  Vecino  " + DEMO_USERS.otroOwner.email + "  → Complejo Vecino (para probar aislamiento)");
