@@ -67,6 +67,24 @@ export function computeAmountCents(
   return Math.round((pricePerHour * 100 * durationMinutes) / 60);
 }
 
+/**
+ * ¿Un cobro pendiente sigue cobrando lo que vale el turno?
+ *
+ * Al reprogramar una reserva (otra cancha u otra duración) el link ya generado
+ * conserva el importe viejo, y el webhook lo aprobaría igual porque compara
+ * contra ese importe guardado. Si el turno nuevo cuesta distinto, o la cancha
+ * ya no tiene precio, el cobro deja de valer (fail-closed).
+ */
+export function pendingAmountStillValid(
+  amountCents: number,
+  pricePerHour: number | null,
+  durationMinutes: number,
+): boolean {
+  if (pricePerHour == null || !(pricePerHour > 0)) return false;
+  if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) return false;
+  return computeAmountCents(pricePerHour, durationMinutes) === amountCents;
+}
+
 /** Comisión del marketplace, en centavos. Nunca supera el total. */
 export function computeFeeCents(
   amountCents: number,

@@ -229,6 +229,12 @@ export default async function ReservaDetallePage({
               <CardTitle className="text-base">Mover la reserva</CardTitle>
               <CardDescription>
                 Elegí cancha y fecha, y después el nuevo turno.
+                {activePayment?.status === "pendiente"
+                  ? " Si el turno nuevo cuesta distinto, el link de pago se anula y hay que generar uno nuevo."
+                  : null}
+                {activePayment?.status === "aprobado"
+                  ? " La reserva ya está paga: si el turno nuevo cuesta distinto, la diferencia se arregla con el cliente."
+                  : null}
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4">

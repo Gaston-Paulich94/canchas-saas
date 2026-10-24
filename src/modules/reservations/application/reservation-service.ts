@@ -36,6 +36,7 @@ import {
 import { findOrCreateCustomerTx } from "@/modules/customers/application/customer-service";
 import {
   cancelReservationPaymentsTx,
+  cancelStalePendingPaymentTx,
   expirePaymentLinks,
 } from "@/modules/payments/application/payment-service";
 
@@ -128,14 +129,19 @@ export async function createReservation(
   });
 }
 
+/**
+ * Reprograma una reserva (cancha, fecha y horario). Si el turno nuevo cuesta
+ * distinto, en la MISMA transacción anula el cobro pendiente (su link cobraría
+ * el importe viejo) y después vence ese link en MP.
+ */
 export async function rescheduleReservation(
   ctx: SessionContext,
   id: string,
   input: RescheduleReservationInput,
 ): Promise<Reservation> {
   assertRole(ctx, MANAGE_ROLES);
-  return withTenant(ctx.tenantId, async (tx) => {
-    const { startsAt, endsAt } = await resolveSlot(
+  const result = await withTenant(ctx.tenantId, async (tx) => {
+    const { court, startsAt, endsAt } = await resolveSlot(
       tx,
       ctx.tenantId,
       input.courtId,
@@ -144,19 +150,31 @@ export async function rescheduleReservation(
     );
     if (startsAt.getTime() < Date.now()) throw new PastReservationError();
 
+    let updated: Reservation | null;
     try {
-      const updated = await updateReservationSchedule(tx, ctx.tenantId, id, {
+      updated = await updateReservationSchedule(tx, ctx.tenantId, id, {
         courtId: input.courtId,
         startsAt,
         endsAt,
       });
-      if (!updated) throw new ReservationNotFoundError();
-      return updated;
     } catch (err) {
       if (isExclusionViolation(err)) throw new SlotUnavailableError();
       throw err;
     }
+    if (!updated) throw new ReservationNotFoundError();
+
+    const preferenceIds = await cancelStalePendingPaymentTx(
+      tx,
+      ctx.tenantId,
+      updated,
+      court.pricePerHour,
+    );
+    return { updated, preferenceIds };
   });
+
+  // Fuera de la transacción: best-effort (si falla, lo cubre el webhook).
+  await expirePaymentLinks(ctx.tenantId, result.preferenceIds);
+  return result.updated;
 }
 
 /**
