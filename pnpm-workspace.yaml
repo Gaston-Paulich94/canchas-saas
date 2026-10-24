@@ -18,7 +18,13 @@ allowBuilds:
 #    injection (GHSA-p88m-4jfj-68fv y otros) — llega vía testcontainers (solo tests).
 #  - brace-expansion / js-yaml: DoS por expansión exponencial y por merge-keys —
 #    llegan vía eslint y testcontainers (tooling).
-#  - sharp: vulnerabilidades heredadas de libvips — llega vía next (opcional).
+#  - sharp: vulnerabilidades heredadas de libvips/librsvg — llega vía next (opcional).
+#  - source-map-js: DoS del event loop con source maps manipulados — vía postcss (build).
+#  - zod: copia vieja dentro de better-auth > better-call (GHSA-mrhx-c7xc-m3w5);
+#    la nuestra es directa y ya está en >=4.6.6.
+#  - vite: vía vitest (solo tests; dev server de Vitest, GHSA-587h-7wmj-h5pm y otros).
+#    Ojo: el override solo no re-resolvía la entrada vieja del lockfile; se
+#    destrabó con `pnpm add -D vite@^8.3.4` + `pnpm remove vite`.
 #  - protobufjs: DoS por loop infinito — vía testcontainers.
 #  - browserslist / nanoid / baseline-browser-mapping: DoS y crash por input
 #    malicioso — llegan vía next (build) y postcss.
@@ -31,12 +37,15 @@ allowBuilds:
 overrides:
   postcss@<8.5.18: ">=8.5.18 <9"
   esbuild@<0.28.1: ">=0.28.1 <1"
-  undici@8: ">=8.9.0 <9"
+  undici@8: ">=8.12.2 <9"
   brace-expansion@1: ">=1.1.21 <2"
   brace-expansion@2: ">=2.1.2 <3"
   brace-expansion@5: ">=5.0.12 <6"
   js-yaml@4: ">=4.3.2 <5"
-  sharp@<0.35.4: ">=0.35.4 <0.36"
+  sharp@<0.35.5: ">=0.35.5 <0.36"
+  source-map-js@1: ">=1.2.2 <2"
+  zod@4: ">=4.6.6 <5"
+  vite@8: ">=8.1.6 <9"
   protobufjs@7: ">=7.6.5 <8"
   browserslist@4: ">=4.28.7 <5"
   nanoid@3: ">=3.3.18 <4"

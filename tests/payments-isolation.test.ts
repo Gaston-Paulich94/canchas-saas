@@ -13,6 +13,7 @@ import {
 } from "@/modules/payments/infrastructure/payment.repository";
 import { arDateTimeToUtc } from "@/modules/reservations/domain/datetime";
 import { isUniqueViolation } from "@/modules/shared/infrastructure/db/pg-errors";
+import { replaceMpTokensIfUnchanged } from "@/modules/tenants/infrastructure/tenant.repository";
 import {
   decidePaymentUpdate,
   needsRefund,
@@ -356,6 +357,45 @@ describe("Pagos — aislamiento, idempotencia y anti doble cobro", () => {
     expect(totalA).toBe(lista.length);
     const listaB = await asTenant(tenantB, (tx) => listPaymentsNeedingRefund(tx, tenantB));
     expect(listaB.map((x) => x.id)).toEqual([deB]);
+  });
+
+  it("tokens de MP: compare-and-swap (guarda solo si nadie renovó antes) y sin cruzar complejos", async () => {
+    await db.adminSql`update tenants
+      set mp_access_token_enc = 'acc-v1', mp_refresh_token_enc = 'ref-v1'
+      where id = ${tenantA}`;
+
+    // Con el valor esperado correcto, guarda.
+    const ok = await asTenant(tenantA, (tx) =>
+      replaceMpTokensIfUnchanged(tx, tenantA, "ref-v1", {
+        mpAccessTokenEnc: "acc-v2",
+        mpRefreshTokenEnc: "ref-v2",
+        mpTokenExpiresAt: null,
+      }),
+    );
+    expect(ok).toBe(true);
+
+    // Un segundo pedido que todavía tenía "ref-v1" pierde la carrera: no pisa.
+    const tarde = await asTenant(tenantA, (tx) =>
+      replaceMpTokensIfUnchanged(tx, tenantA, "ref-v1", {
+        mpAccessTokenEnc: "acc-pisado",
+        mpRefreshTokenEnc: "ref-pisado",
+        mpTokenExpiresAt: null,
+      }),
+    );
+    expect(tarde).toBe(false);
+    const [row] = await db.adminSql`select mp_refresh_token_enc from tenants where id = ${tenantA}`;
+    expect(row?.mp_refresh_token_enc).toBe("ref-v2");
+
+    // Parado en A no se pueden reemplazar los tokens de B, aunque se adivine el valor.
+    await db.adminSql`update tenants set mp_refresh_token_enc = 'ref-b' where id = ${tenantB}`;
+    const cruzado = await asTenant(tenantA, (tx) =>
+      replaceMpTokensIfUnchanged(tx, tenantB, "ref-b", {
+        mpAccessTokenEnc: "x",
+        mpRefreshTokenEnc: "x",
+        mpTokenExpiresAt: null,
+      }),
+    );
+    expect(cruzado).toBe(false);
   });
 
   // ── Función de resolución del webhook ──────────────────────────────────────

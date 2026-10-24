@@ -263,6 +263,20 @@ export class MpNotConnectedError extends Error {
   }
 }
 
+/**
+ * El token de MP venció y no se pudo renovar (el refresh token dejó de valer,
+ * o el complejo revocó el acceso desde su cuenta). Solo se arregla
+ * reconectando la cuenta.
+ */
+export class MpConnectionExpiredError extends Error {
+  constructor() {
+    super(
+      "La conexión con Mercado Pago venció. El dueño tiene que volver a conectar la cuenta.",
+    );
+    this.name = "MpConnectionExpiredError";
+  }
+}
+
 /** La cancha no tiene precio por hora cargado: no se puede cobrar. */
 export class CourtPriceMissingError extends Error {
   constructor() {

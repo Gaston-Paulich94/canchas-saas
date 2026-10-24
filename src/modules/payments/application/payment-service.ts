@@ -27,7 +27,7 @@ import {
   listPaymentsNeedingRefund,
   type RefundablePayment,
 } from "@/modules/payments/infrastructure/payment.repository";
-import { getMpAccessToken } from "@/modules/payments/infrastructure/mp-credentials";
+import { getValidMpAccessToken } from "@/modules/payments/application/mp-token-service";
 import {
   createPreference,
   expirePreference,
@@ -100,7 +100,12 @@ export async function createPaymentLink(
 ): Promise<PaymentLink> {
   assertRole(ctx, MANAGE_ROLES);
 
-  const { payment, title, accessToken } = await withTenant(
+  // Token válido (renovado si hacía falta) ANTES de la transacción: renovar es
+  // una llamada a MP y nunca va con una tx abierta. Sin cuenta conectada corta
+  // acá, sin dejar ninguna fila creada.
+  const accessToken = await getValidMpAccessToken(ctx.tenantId);
+
+  const { payment, title } = await withTenant(
     ctx.tenantId,
     async (tx) => {
       const reservation = await findReservationById(
@@ -136,9 +141,6 @@ export async function createPaymentLink(
         env.MP_MARKETPLACE_FEE_PERCENT,
       );
 
-      // Se descifra acá y se usa fuera de la tx; nunca se persiste ni loguea.
-      const token = await getMpAccessToken(tx, ctx.tenantId);
-
       let created: Payment;
       try {
         created = await insertPayment(tx, {
@@ -156,7 +158,6 @@ export async function createPaymentLink(
       return {
         payment: created,
         title: `${court.name} · ${reservation.customerName}`,
-        accessToken: token,
       };
     },
   );
@@ -252,11 +253,10 @@ export async function expirePaymentLinks(
 
   let accessToken: string;
   try {
-    accessToken = await withTenant(tenantId, (tx) =>
-      getMpAccessToken(tx, tenantId),
-    );
+    accessToken = await getValidMpAccessToken(tenantId);
   } catch {
-    // Sin cuenta conectada no hay links que vencer desde acá.
+    // Sin cuenta conectada (o conexión vencida) no hay links que vencer desde
+    // acá; si alguien paga igual, el webhook lo registra como pago a devolver.
     return { vencidos: 0, fallidos: preferenceIds.length };
   }
 

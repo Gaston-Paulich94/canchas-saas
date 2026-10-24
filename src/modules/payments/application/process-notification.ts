@@ -5,7 +5,7 @@ import {
   updatePayment,
   resolvePaymentTenant,
 } from "@/modules/payments/infrastructure/payment.repository";
-import { getMpAccessToken } from "@/modules/payments/infrastructure/mp-credentials";
+import { getValidMpAccessToken } from "@/modules/payments/application/mp-token-service";
 import { getPayment } from "@/modules/payments/infrastructure/mp-client";
 import { findReservationById } from "@/modules/reservations/infrastructure/reservation.repository";
 import {
@@ -54,10 +54,11 @@ export async function processPaymentNotification(
     return { status: "ignorado", motivo: "referencia_desconocida" };
   }
 
-  // Token del complejo (descifrado en memoria) para consultar la API de MP.
-  const accessToken = await withTenant(tenantId, (tx) =>
-    getMpAccessToken(tx, tenantId),
-  );
+  // Token del complejo, renovado si hacía falta, para consultar la API de MP.
+  // Si la conexión venció, lanza: la ruta responde 500 y MP reintenta la
+  // notificación durante un tiempo LIMITADO. Si la reconexión demora más que
+  // eso, el pago no se acredita solo: por eso el panel avisa ni bien vence.
+  const accessToken = await getValidMpAccessToken(tenantId);
 
   // Fuente de verdad: el pago tal como lo ve Mercado Pago.
   const snapshot = await getPayment(accessToken, mpPaymentId);
