@@ -119,9 +119,14 @@ mes) más un "Complejo Vecino" para comprobar el aislamiento. Usuarios:
 | `pnpm db:migrate` | aplica migraciones (rol admin) + crea `app_user` |
 | `pnpm db:seed` | datos de demo en local (`--reset` regenera) |
 | `pnpm test` | tests (Vitest + testcontainers) |
+| `pnpm test:e2e` | tests en navegador real (Playwright; necesita la base local con `pnpm db:seed`) |
 
 > Los tests de integración levantan Postgres con **testcontainers**: necesitás
 > Docker corriendo.
+>
+> Los tests E2E (`e2e/`) usan Chromium contra la app levantada con `pnpm dev`
+> (Playwright la arranca solo si no está corriendo) y los datos del seed de demo.
+> La primera vez instalá el navegador: `pnpm exec playwright install chromium`.
 
 ## Docker / Compose
 
