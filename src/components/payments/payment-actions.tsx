@@ -16,11 +16,14 @@ export function CreatePaymentLinkButton({
 }: {
   reservationId: string;
 }) {
-  const action = createPaymentLinkAction.bind(null, reservationId);
-  const [state, formAction, pending] = useActionState(action, initialState);
+  const [state, formAction, pending] = useActionState(
+    createPaymentLinkAction,
+    initialState,
+  );
 
   return (
     <form action={formAction}>
+      <input type="hidden" name="reservationId" value={reservationId} />
       <Button type="submit" disabled={pending}>
         {pending ? "Generando…" : "Generar link de pago"}
       </Button>
@@ -40,11 +43,15 @@ export function CancelPaymentButton({
   reservationId: string;
   paymentId: string;
 }) {
-  const action = cancelPaymentAction.bind(null, reservationId, paymentId);
-  const [state, formAction, pending] = useActionState(action, initialState);
+  const [state, formAction, pending] = useActionState(
+    cancelPaymentAction,
+    initialState,
+  );
 
   return (
     <form action={formAction}>
+      <input type="hidden" name="reservationId" value={reservationId} />
+      <input type="hidden" name="paymentId" value={paymentId} />
       <Button variant="ghost" size="sm" type="submit" disabled={pending}>
         {pending ? "Anulando…" : "Anular cobro"}
       </Button>

@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { readIdField } from "@/lib/form-ids";
 import { requireSessionContext } from "@/modules/auth/application/session-context";
 import {
   UnauthenticatedError,
@@ -83,10 +84,11 @@ export async function disconnectMpAction(
 
 /** Genera el link de pago de una reserva (importe calculado en el backend). */
 export async function createPaymentLinkAction(
-  reservationId: string,
   _prev: ActionState,
-  _formData: FormData,
+  formData: FormData,
 ): Promise<ActionState> {
+  const reservationId = readIdField(formData, "reservationId");
+  if (!reservationId) return { error: "Reserva no encontrada." };
   try {
     const ctx = await requireSessionContext();
     await createPaymentLink(ctx, reservationId);
@@ -98,11 +100,12 @@ export async function createPaymentLinkAction(
 }
 
 export async function cancelPaymentAction(
-  reservationId: string,
-  paymentId: string,
   _prev: ActionState,
-  _formData: FormData,
+  formData: FormData,
 ): Promise<ActionState> {
+  const reservationId = readIdField(formData, "reservationId");
+  const paymentId = readIdField(formData, "paymentId");
+  if (!reservationId || !paymentId) return { error: "Pago no encontrado." };
   try {
     const ctx = await requireSessionContext();
     await cancelPayment(ctx, paymentId);

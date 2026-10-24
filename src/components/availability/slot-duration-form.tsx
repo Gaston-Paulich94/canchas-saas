@@ -18,11 +18,14 @@ export function SlotDurationForm({
   courtId: string;
   current: number;
 }) {
-  const action = setSlotDurationAction.bind(null, courtId);
-  const [state, formAction, pending] = useActionState(action, initialState);
+  const [state, formAction, pending] = useActionState(
+    setSlotDurationAction,
+    initialState,
+  );
 
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-3">
+      <input type="hidden" name="courtId" value={courtId} />
       <div className="grid gap-1">
         <Label htmlFor="slotDurationMin">Duración del turno (minutos)</Label>
         <Input

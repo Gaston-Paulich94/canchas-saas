@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { readIdField } from "@/lib/form-ids";
 import { requireSessionContext } from "@/modules/auth/application/session-context";
 import {
   UnauthenticatedError,
@@ -80,10 +81,12 @@ export async function createReservationAction(
 }
 
 export async function rescheduleReservationAction(
-  id: string,
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  // "courtId" ya es un campo de este form (la cancha DESTINO): la reserva va aparte.
+  const id = readIdField(formData, "reservationId");
+  if (!id) return { error: "Reserva no encontrada." };
   const parsed = rescheduleReservationSchema.safeParse({
     courtId: str(formData, "courtId"),
     date: str(formData, "date"),
@@ -105,11 +108,13 @@ export async function rescheduleReservationAction(
 }
 
 export async function cancelReservationAction(
-  id: string,
-  returnDate: string | null,
   _prev: ActionState,
-  _formData: FormData,
+  formData: FormData,
 ): Promise<ActionState> {
+  const id = readIdField(formData, "reservationId");
+  if (!id) return { error: "Reserva no encontrada." };
+  // Solo para volver a la agenda de ese día; se valida antes del redirect.
+  const returnDate = (formData.get("returnDate") ?? "").toString();
   try {
     const ctx = await requireSessionContext();
     await cancelReservation(ctx, id);

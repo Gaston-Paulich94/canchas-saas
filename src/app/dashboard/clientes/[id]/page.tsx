@@ -50,8 +50,6 @@ export default async function EditarClientePage({
     throw err;
   }
 
-  const action = updateCustomerAction.bind(null, customer.id);
-
   return (
     <main className="mx-auto flex min-h-screen max-w-lg flex-col gap-6 p-6">
       <header>
@@ -70,7 +68,7 @@ export default async function EditarClientePage({
         </CardHeader>
         <CardContent>
           <CustomerForm
-            action={action}
+            action={updateCustomerAction}
             defaultValues={customer}
             submitLabel="Guardar cambios"
             pendingLabel="Guardando…"

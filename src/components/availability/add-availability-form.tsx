@@ -14,11 +14,14 @@ import { NativeSelect } from "@/components/ui/native-select";
 const initialState: ActionState = { error: null };
 
 export function AddAvailabilityForm({ courtId }: { courtId: string }) {
-  const action = addAvailabilityAction.bind(null, courtId);
-  const [state, formAction, pending] = useActionState(action, initialState);
+  const [state, formAction, pending] = useActionState(
+    addAvailabilityAction,
+    initialState,
+  );
 
   return (
     <form action={formAction} className="grid gap-3 sm:grid-cols-[1fr_auto_auto_auto] sm:items-end">
+      <input type="hidden" name="courtId" value={courtId} />
       <div className="grid gap-1">
         <Label htmlFor="dayOfWeek">Día</Label>
         <NativeSelect id="dayOfWeek" name="dayOfWeek" required defaultValue="">

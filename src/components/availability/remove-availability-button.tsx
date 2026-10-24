@@ -10,8 +10,8 @@ import { Button } from "@/components/ui/button";
 const initialState: ActionState = { error: null };
 
 /**
- * Quita una franja horaria. courtId + availabilityId se ligan en el SERVIDOR;
- * el service igual scopea por tenant (RLS + filtro) al borrar.
+ * Quita una franja horaria. El id viaja como campo oculto: el cliente lo controla, así que el service
+ * vuelve a verificar que pertenezca al complejo (tenant + id, más RLS).
  */
 export function RemoveAvailabilityButton({
   courtId,
@@ -20,11 +20,15 @@ export function RemoveAvailabilityButton({
   courtId: string;
   availabilityId: string;
 }) {
-  const action = removeAvailabilityAction.bind(null, courtId, availabilityId);
-  const [state, formAction, pending] = useActionState(action, initialState);
+  const [state, formAction, pending] = useActionState(
+    removeAvailabilityAction,
+    initialState,
+  );
 
   return (
     <form action={formAction}>
+      <input type="hidden" name="courtId" value={courtId} />
+      <input type="hidden" name="availabilityId" value={availabilityId} />
       <Button variant="ghost" size="sm" type="submit" disabled={pending}>
         {pending ? "Quitando…" : "Quitar"}
       </Button>

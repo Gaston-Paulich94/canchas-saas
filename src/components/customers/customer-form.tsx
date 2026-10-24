@@ -32,6 +32,9 @@ export function CustomerForm({
 
   return (
     <form action={formAction} className="grid gap-4">
+      {defaultValues ? (
+        <input type="hidden" name="customerId" value={defaultValues.id} />
+      ) : null}
       <div className="grid gap-2">
         <Label htmlFor="name">Nombre</Label>
         <Input
