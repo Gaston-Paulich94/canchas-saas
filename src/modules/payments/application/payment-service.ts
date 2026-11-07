@@ -6,10 +6,14 @@ import { isUniqueViolation } from "@/modules/shared/infrastructure/db/pg-errors"
 import { findCourtById } from "@/modules/courts/infrastructure/court.repository";
 import { CourtNotFoundError } from "@/modules/courts/domain/court";
 import { findReservationById } from "@/modules/reservations/infrastructure/reservation.repository";
-import { ReservationNotFoundError } from "@/modules/reservations/domain/reservation";
+import {
+  ReservationNotFoundError,
+  type Reservation,
+} from "@/modules/reservations/domain/reservation";
 import {
   computeAmountCents,
   computeFeeCents,
+  pendingAmountStillValid,
   CourtPriceMissingError,
   MpApiError,
   PaymentAlreadyExistsError,
@@ -235,6 +239,36 @@ export function cancelReservationPaymentsTx(
   reservationId: string,
 ): Promise<string[]> {
   return cancelPendingPaymentsForReservation(tx, tenantId, reservationId);
+}
+
+/**
+ * Después de reprogramar una reserva, DENTRO de la misma transacción: si su
+ * cobro pendiente ya no corresponde al importe del turno nuevo, lo anula.
+ * Devuelve los ids de preferencia a vencer con `expirePaymentLinks`.
+ *
+ * Los cobros aprobados no se tocan: si la reserva ya estaba paga, la
+ * diferencia la resuelve el complejo (igual que al cancelar).
+ */
+export async function cancelStalePendingPaymentTx(
+  tx: DbTx,
+  tenantId: string,
+  reservation: Pick<Reservation, "id" | "startsAt" | "endsAt">,
+  pricePerHour: number | null,
+): Promise<string[]> {
+  const active = await findActivePaymentByReservation(
+    tx,
+    tenantId,
+    reservation.id,
+  );
+  if (!active || active.status !== "pendiente") return [];
+
+  const durationMinutes = Math.round(
+    (reservation.endsAt.getTime() - reservation.startsAt.getTime()) / 60000,
+  );
+  if (pendingAmountStillValid(active.amountCents, pricePerHour, durationMinutes)) {
+    return [];
+  }
+  return cancelPendingPaymentsForReservation(tx, tenantId, reservation.id);
 }
 
 /**
