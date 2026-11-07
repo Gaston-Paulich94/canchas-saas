@@ -4,7 +4,7 @@ import { env } from "@/env";
 import { withTenant } from "@/modules/shared/infrastructure/db/with-tenant";
 import { assertRole } from "@/modules/shared/application/authz";
 import { ROLES, type SessionContext } from "@/modules/auth/domain/roles";
-import { encryptSecret } from "@/modules/shared/infrastructure/crypto/aes-gcm";
+import { encryptMpToken } from "@/modules/payments/infrastructure/mp-token-crypto";
 import { updateTenantMpCredentials } from "@/modules/tenants/infrastructure/tenant.repository";
 import {
   getMpConnectionStatus,
@@ -99,9 +99,9 @@ export async function completeMpConnection(
   await withTenant(ctx.tenantId, (tx) =>
     updateTenantMpCredentials(tx, ctx.tenantId, {
       mpUserId: tokens.user_id,
-      mpAccessTokenEnc: encryptSecret(tokens.access_token),
+      mpAccessTokenEnc: encryptMpToken(ctx.tenantId, "access", tokens.access_token),
       mpRefreshTokenEnc: tokens.refresh_token
-        ? encryptSecret(tokens.refresh_token)
+        ? encryptMpToken(ctx.tenantId, "refresh", tokens.refresh_token)
         : null,
       mpTokenExpiresAt: expiresAt,
     }),
