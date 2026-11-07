@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { readIdField } from "@/lib/form-ids";
+import { isCalendarDate } from "@/lib/calendar-date";
 import { requireSessionContext } from "@/modules/auth/application/session-context";
 import {
   UnauthenticatedError,
@@ -126,7 +127,7 @@ export async function cancelReservationAction(
 
   revalidatePath(RESERVAS_PATH);
   redirect(
-    returnDate && /^\d{4}-\d{2}-\d{2}$/.test(returnDate)
+    isCalendarDate(returnDate)
       ? `${RESERVAS_PATH}?fecha=${returnDate}`
       : RESERVAS_PATH,
   );
