@@ -31,7 +31,10 @@ export function proxy(request: NextRequest): NextResponse {
     `connect-src 'self'`,
     `object-src 'none'`,
     `base-uri 'self'`,
-    `form-action 'self'`,
+    // "Conectar Mercado Pago" es un form cuya respuesta redirige al OAuth de
+    // MP, y MP redirige a su vez al login de Mercado Libre. Sin JavaScript el
+    // navegador aplica form-action a toda esa cadena de redirecciones.
+    `form-action 'self' https://auth.mercadopago.com.ar https://*.mercadopago.com.ar https://www.mercadolibre.com https://*.mercadolibre.com.ar`,
     `frame-ancestors 'none'`,
     ...(isProd ? ["upgrade-insecure-requests"] : []),
   ].join("; ");
