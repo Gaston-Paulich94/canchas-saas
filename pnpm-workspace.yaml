@@ -62,6 +62,12 @@ overrides:
 #   Es tooling de DESARROLLO y los únicos globs que procesa son los nuestros,
 #   así que no hay input de atacante en ese camino. Sin esta exclusión, el job
 #   de auditoría del CI quedaría rojo por algo que no podemos arreglar.
+# Riesgo ACEPTADO (no ignorado: `pnpm audit` lo sigue mostrando):
+#   GHSA-g3hv-75wg-m249 — minimatch 10.x, DoS con patrones glob armados. Moderado
+#   (el CI corta en alto). Llega vía testcontainers > archiver > readdir-glob,
+#   solo en tests y con globs nuestros. El parche está recién en 11.x y forzar
+#   un salto de major en una transitiva puede romperla: esperar a que archiver
+#   lo actualice.
 auditConfig:
   ignoreGhsas:
     - GHSA-vfj7-8cjw-p6xm
