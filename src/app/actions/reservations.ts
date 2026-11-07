@@ -22,6 +22,7 @@ import {
   InvalidSlotError,
   SlotUnavailableError,
   PastReservationError,
+  CourtInactiveError,
 } from "@/modules/reservations/domain/reservation";
 import { CourtNotFoundError } from "@/modules/courts/domain/court";
 
@@ -36,6 +37,7 @@ function toActionError(err: unknown): string {
   if (err instanceof SlotUnavailableError) return err.message;
   if (err instanceof InvalidSlotError) return err.message;
   if (err instanceof PastReservationError) return err.message;
+  if (err instanceof CourtInactiveError) return err.message;
   if (err instanceof ReservationNotFoundError) return err.message;
   if (err instanceof CourtNotFoundError) return err.message;
   if (err instanceof AuthorizationError) {
