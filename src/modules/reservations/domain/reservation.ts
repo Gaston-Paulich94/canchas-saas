@@ -39,6 +39,23 @@ export class SlotUnavailableError extends Error {
   }
 }
 
+/** La cancha está desactivada: ya no se ofrece. */
+export class CourtInactiveError extends Error {
+  constructor() {
+    super("Esa cancha está desactivada: no se pueden tomar turnos en ella.");
+    this.name = "CourtInactiveError";
+  }
+}
+
+/**
+ * Una cancha desactivada no acepta reservas nuevas ni que se muevan turnos a
+ * ella. La UI ya las oculta, pero eso no alcanza: la regla vive en el server.
+ * Las reservas que ya tenía se conservan.
+ */
+export function assertCourtBookable(court: { isActive: boolean }): void {
+  if (!court.isActive) throw new CourtInactiveError();
+}
+
 /** No se puede reservar en el pasado. */
 export class PastReservationError extends Error {
   constructor() {

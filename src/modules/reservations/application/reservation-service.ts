@@ -16,6 +16,7 @@ import {
   InvalidSlotError,
   SlotUnavailableError,
   PastReservationError,
+  assertCourtBookable,
   type Reservation,
 } from "@/modules/reservations/domain/reservation";
 import {
@@ -74,6 +75,7 @@ async function resolveSlot(
 ): Promise<{ court: Court; startsAt: Date; endsAt: Date }> {
   const court = await findCourtById(tx, tenantId, courtId);
   if (!court) throw new CourtNotFoundError();
+  assertCourtBookable(court);
 
   const windows = await listAvailabilityByCourt(tx, tenantId, courtId);
   const forDay = windows.filter((w) => w.dayOfWeek === weekdayOf(dateStr));
@@ -250,6 +252,8 @@ export async function getFreeSlots(
   return withTenant(ctx.tenantId, async (tx) => {
     const court = await findCourtById(tx, ctx.tenantId, courtId);
     if (!court) throw new CourtNotFoundError();
+    // Una cancha desactivada no ofrece turnos.
+    if (!court.isActive) return [];
 
     const windows = await listAvailabilityByCourt(tx, ctx.tenantId, courtId);
     const forDay = windows.filter((w) => w.dayOfWeek === weekdayOf(dateStr));
