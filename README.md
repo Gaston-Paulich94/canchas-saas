@@ -157,7 +157,8 @@ plata cae ahí; la plataforma retiene `MP_MARKETPLACE_FEE_PERCENT`.
    solo se puede probar entre cuentas de prueba.
 
 `APP_PUBLIC_URL` tiene que ser alcanzable por Mercado Pago. En local usá un túnel
-(`ngrok http 3000` o `cloudflared`) y cargá esa misma URL en el panel.
+(`ngrok http 3000` o `cloudflared`) y cargá esa misma URL en el panel. Paso a
+paso, con cuentas de prueba: [docs/pruebas-mercado-pago.md](docs/pruebas-mercado-pago.md).
 
 ### Cómo se cobra
 
