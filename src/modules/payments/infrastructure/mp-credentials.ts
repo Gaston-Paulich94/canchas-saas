@@ -1,6 +1,6 @@
 import type { DbTx } from "@/modules/shared/infrastructure/db/client";
 import { findTenantById } from "@/modules/tenants/infrastructure/tenant.repository";
-import { decryptSecret } from "@/modules/shared/infrastructure/crypto/aes-gcm";
+import { decryptMpToken } from "@/modules/payments/infrastructure/mp-token-crypto";
 import { MpNotConnectedError } from "@/modules/payments/domain/payment";
 import { tokenIsExpired } from "@/modules/payments/domain/mp-token";
 
@@ -58,9 +58,9 @@ export async function loadMpTokens(
   const tenant = await findTenantById(tx, tenantId);
   if (!tenant?.mpAccessTokenEnc) throw new MpNotConnectedError();
   return {
-    accessToken: decryptSecret(tenant.mpAccessTokenEnc),
+    accessToken: decryptMpToken(tenantId, "access", tenant.mpAccessTokenEnc),
     refreshToken: tenant.mpRefreshTokenEnc
-      ? decryptSecret(tenant.mpRefreshTokenEnc)
+      ? decryptMpToken(tenantId, "refresh", tenant.mpRefreshTokenEnc)
       : null,
     expiresAt: tenant.mpTokenExpiresAt,
     refreshTokenEnc: tenant.mpRefreshTokenEnc,

@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { readIdField } from "@/lib/form-ids";
+import { isCalendarDate } from "@/lib/calendar-date";
 import { requireSessionContext } from "@/modules/auth/application/session-context";
 import {
   UnauthenticatedError,
@@ -22,6 +23,7 @@ import {
   InvalidSlotError,
   SlotUnavailableError,
   PastReservationError,
+  CourtInactiveError,
 } from "@/modules/reservations/domain/reservation";
 import { CourtNotFoundError } from "@/modules/courts/domain/court";
 
@@ -36,6 +38,7 @@ function toActionError(err: unknown): string {
   if (err instanceof SlotUnavailableError) return err.message;
   if (err instanceof InvalidSlotError) return err.message;
   if (err instanceof PastReservationError) return err.message;
+  if (err instanceof CourtInactiveError) return err.message;
   if (err instanceof ReservationNotFoundError) return err.message;
   if (err instanceof CourtNotFoundError) return err.message;
   if (err instanceof AuthorizationError) {
@@ -124,7 +127,7 @@ export async function cancelReservationAction(
 
   revalidatePath(RESERVAS_PATH);
   redirect(
-    returnDate && /^\d{4}-\d{2}-\d{2}$/.test(returnDate)
+    isCalendarDate(returnDate)
       ? `${RESERVAS_PATH}?fecha=${returnDate}`
       : RESERVAS_PATH,
   );

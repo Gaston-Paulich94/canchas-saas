@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { calendarDateSchema } from "@/lib/calendar-date";
 
 /**
  * Esquemas Zod de disponibilidad — fuente única para form y Server Action.
@@ -37,9 +38,7 @@ export const slotDurationSchema = z
   .strict();
 
 // Fecha "YYYY-MM-DD" para el preview de slots.
-export const previewDateSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida.");
+export const previewDateSchema = calendarDateSchema;
 
 export type CreateAvailabilityInput = z.infer<typeof createAvailabilitySchema>;
 export type SlotDurationInput = z.infer<typeof slotDurationSchema>;

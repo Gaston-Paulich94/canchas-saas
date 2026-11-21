@@ -10,10 +10,18 @@
 export const AR_UTC_OFFSET = "-03:00";
 const AR_OFFSET_MS = 3 * 60 * 60 * 1000;
 
-/** "YYYY-MM-DD" + "HH:MM" (hora argentina) → Date (instante UTC). */
+/**
+ * "YYYY-MM-DD" + "HH:MM" (hora argentina) → Date (instante UTC).
+ * Rechaza fechas que JavaScript "corre" en silencio (31/02 → 03/03): si el
+ * instante no vuelve a dar la misma fecha y hora, la entrada no existía.
+ */
 export function arDateTimeToUtc(dateStr: string, timeStr: string): Date {
   const d = new Date(`${dateStr}T${timeStr}:00${AR_UTC_OFFSET}`);
-  if (Number.isNaN(d.getTime())) {
+  if (
+    Number.isNaN(d.getTime()) ||
+    utcToArDate(d) !== dateStr ||
+    utcToArTime(d) !== timeStr
+  ) {
     throw new Error(`Fecha/hora inválida: ${dateStr} ${timeStr}`);
   }
   return d;

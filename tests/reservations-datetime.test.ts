@@ -33,4 +33,11 @@ describe("Fecha/hora AR (lógica pura, offset fijo -03:00)", () => {
   it("rechaza fecha/hora inválida", () => {
     expect(() => arDateTimeToUtc("2026-13-40", "18:00")).toThrow();
   });
+
+  it("rechaza fechas que JavaScript correría en silencio (31/02 → 03/03)", () => {
+    expect(() => arDateTimeToUtc("2026-02-31", "18:00")).toThrow();
+    expect(() => arDateTimeToUtc("2026-04-31", "10:00")).toThrow();
+    expect(() => arDateTimeToUtc("2026-02-29", "10:00")).toThrow();
+    expect(arDateTimeToUtc("2028-02-29", "10:00").toISOString()).toBe("2028-02-29T13:00:00.000Z");
+  });
 });

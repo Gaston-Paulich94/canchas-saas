@@ -1,5 +1,5 @@
 import { withTenant } from "@/modules/shared/infrastructure/db/with-tenant";
-import { encryptSecret } from "@/modules/shared/infrastructure/crypto/aes-gcm";
+import { encryptMpToken } from "@/modules/payments/infrastructure/mp-token-crypto";
 import {
   loadMpTokens,
   type StoredMpTokens,
@@ -48,8 +48,8 @@ const defaultDeps: MpTokenDeps = {
   saveIfUnchanged: (tenantId, expected, tokens) =>
     withTenant(tenantId, (tx) =>
       replaceMpTokensIfUnchanged(tx, tenantId, expected, {
-        mpAccessTokenEnc: encryptSecret(tokens.accessToken),
-        mpRefreshTokenEnc: encryptSecret(tokens.refreshToken),
+        mpAccessTokenEnc: encryptMpToken(tenantId, "access", tokens.accessToken),
+        mpRefreshTokenEnc: encryptMpToken(tenantId, "refresh", tokens.refreshToken),
         mpTokenExpiresAt: tokens.expiresAt,
       }),
     ),
