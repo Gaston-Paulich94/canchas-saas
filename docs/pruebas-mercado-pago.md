@@ -11,7 +11,8 @@ el webhook lo acredite. Todo con **cuentas de prueba** de MP.
 ## 0. Qué vas a necesitar
 
 - Tu cuenta **real** de Mercado Pago, solo para entrar al panel de
-  developers. No se usa para pagar ni para cobrar.
+  developers y crear las cuentas de prueba. No se usa para pagar, cobrar ni
+  para la aplicación.
 - Una cuenta gratuita de **ngrok** (el túnel).
 - La app corriendo en local (`pnpm dev`) con la base levantada.
 
@@ -43,37 +44,44 @@ hay que actualizar `.env` y el panel de MP.
 
 ## 2. Cuentas de prueba
 
-En el panel de developers, sección **Cuentas de prueba**, creá dos:
+Entrá al panel de developers con tu cuenta real y andá a **Integraciones →
+Cuentas de prueba → Crear nueva cuenta**. Para un marketplace, MP pide
+**tres**, todas con país **Argentina** (no se puede cambiar después):
 
-| Cuenta | Para qué |
-|--------|----------|
-| **Vendedor** | Es el complejo: con esta cuenta se hace "Conectar Mercado Pago". |
-| **Comprador** | Es el cliente que paga el link. Podés cargarle saldo ficticio. |
+| Tipo | Descripción sugerida | Para qué |
+|------|----------------------|----------|
+| **Integrador** | "Integrador - Promethix" | Es la dueña de la **aplicación**: representa a la plataforma. |
+| **Vendedor** | "Vendedor - complejo demo" | Es el complejo: con esta cuenta se hace "Conectar Mercado Pago". |
+| **Comprador** | "Comprador - cliente" | Es el cliente que paga el link. Cargale un **saldo ficticio** alto (por ejemplo, $500.000). |
 
-Guardá usuario y contraseña de cada una (las genera MP). Para no mezclar
-sesiones con tu cuenta real, usalas en una **ventana privada**.
+Por cada una, MP genera **usuario**, **contraseña** y un **código de
+verificación** de 6 dígitos, que pide a veces al iniciar sesión. Anotalos en
+un lugar seguro, fuera del repo. Las cuentas de prueba **no se pueden borrar**
+y el máximo es 15.
+
+Usá cada cuenta de prueba en su **propia ventana privada**, para no mezclar
+sesiones con tu cuenta real ni entre ellas.
 
 ## 3. La aplicación en el panel
+
+Todo este paso se hace **logueado con la cuenta Integrador de prueba**, en
+una ventana privada (entrá a <https://www.mercadopago.com.ar/developers> con
+su usuario y contraseña).
 
 1. **Tus integraciones → Crear aplicación.** Nombre, por ejemplo,
    "Promethix Canchas (pruebas)". Producto: **Checkout Pro**, pagos online.
 2. En la configuración de la app, cargá la **URL de redireccionamiento** del
    OAuth, exacta:
    `https://tu-nombre.ngrok-free.app/api/mp/oauth/callback`
-3. **Credenciales:** el `Client ID` y el `Client Secret` de la app van a
-   `MP_CLIENT_ID` y `MP_CLIENT_SECRET`. El OAuth del marketplace usa los de
-   **producción** de la app. Los cobros igual son de prueba, porque se hacen
-   con el token del vendedor de prueba. Si el panel pide completar datos para
-   activar las credenciales de producción, completalos.
+3. **Credenciales:** el número de la aplicación (**Client ID** o **App ID**) y
+   el **Client Secret** van a `MP_CLIENT_ID` y `MP_CLIENT_SECRET`. Son los de
+   **producción** de la app del Integrador. Los cobros igual son de prueba,
+   porque todas las cuentas involucradas son de prueba. Si el panel pide
+   completar datos para activar las credenciales de producción, completalos.
 4. **Webhooks → Configurar notificaciones**:
    - URL: `https://tu-nombre.ngrok-free.app/api/mp/webhooks/payment`
    - Evento: **Pagos**
    - Guardá y copiá la **clave secreta** a `MP_WEBHOOK_SECRET`.
-
-> Si al conectar el vendedor de prueba MP rechaza la autorización por mezclar
-> una app de cuenta real con un usuario de prueba, creá una tercera cuenta de
-> prueba, entrá al panel con ella y armá la app desde ahí (con sus
-> credenciales).
 
 ## 4. `.env`
 
@@ -83,7 +91,11 @@ BETTER_AUTH_URL=https://tu-nombre.ngrok-free.app
 MP_CLIENT_ID=...
 MP_CLIENT_SECRET=...
 MP_WEBHOOK_SECRET=...
+MP_MARKETPLACE_FEE_PERCENT=0
 ```
+
+Empezá con la comisión en **0**. Cuando el flujo básico ande, probá con una
+comisión (por ejemplo `10`) para ver que MP la retenga.
 
 Reiniciá `pnpm dev` después de cambiar `.env`: `next.config.ts` habilita el
 dominio de `APP_PUBLIC_URL` en el dev server al arrancar.
@@ -100,23 +112,31 @@ Entrá por el túnel como `dueno@demo.test`, con la contraseña de
 
 | # | Qué hacer | Qué tiene que pasar |
 |---|-----------|---------------------|
-| 1 | **Pagos → Conectar Mercado Pago** e ingresar con el **vendedor** de prueba | Volvés a Pagos y figura "Conectada". |
+| 1 | **Pagos → Conectar Mercado Pago**, ingresar con el **Vendedor** de prueba y **autorizar** (de una: el código de autorización vence a los 10 minutos) | Volvés a Pagos y figura "Conectada". |
 | 2 | En el panel de MP, Webhooks → **Simular notificación** | En la consola de `pnpm dev`, el webhook responde **200**. Si da **401**, la clave secreta no coincide. |
 | 3 | Crear una reserva en una cancha **con precio** → **Generar link de pago** | Aparece el link y el importe es precio/hora × duración. |
-| 4 | Abrir el link en ventana privada, ingresar con el **comprador** y pagar con una tarjeta de prueba aprobada | Al volver, el cobro de la reserva figura **Aprobado**. |
-| 5 | Repetir con una tarjeta de prueba **rechazada** | El cobro figura **Rechazado**; el mismo link se puede reintentar. |
+| 4 | Abrir el link en una ventana privada, ingresar con el **Comprador** y pagar con **dinero en cuenta** (el saldo ficticio) | Al volver, el cobro de la reserva figura **Aprobado**. |
+| 5 | Generar otro link y pagarlo con una **tarjeta de prueba rechazada** | El cobro figura **Rechazado** y el mismo link se puede reintentar. Si MP no ofrece tarjeta, ver la nota de abajo. |
 | 6 | Generar link, **Anular cobro** y después pagar ese link igual | MP no debería dejar pagarlo. Si lo deja, el pago queda **a devolver** y aparece el aviso. |
 | 7 | Generar link y **mover la reserva** a una cancha con otro precio | El cobro pendiente queda **Cancelado**; hay que generar uno nuevo. |
 
-**Tarjetas de prueba:** están en el panel, en **Tarjetas de prueba**. El
-**nombre del titular** decide el resultado: `APRO` aprueba y `OTHE` rechaza.
-Como documento usá el que indica el panel.
+**Dinero en cuenta o tarjeta.** En un marketplace con split de pagos, MP
+documenta que solo se puede pagar con **dinero en cuenta** de Mercado Pago.
+Por eso el paso 4 usa el saldo del Comprador. Si en el checkout aparece la
+opción de tarjeta, las de prueba están en el panel, en **Tarjetas de prueba**.
+El **nombre del titular** decide el resultado: `APRO` aprueba y `OTHE`
+rechaza. Como documento usá el que indica el panel.
 
 ## 6. Si algo falla
 
 - **"Solicitud de conexión inválida o vencida" al volver de MP:** entraste por
   localhost y volviste por el túnel, o tardaste más de lo que dura el state.
   Entrá por el túnel y reintentá.
+- **MP rechaza la autorización o el intercambio del código** (error al volver
+  a Pagos): confirmá que la app es de la cuenta **Integrador** y que conectás
+  con la **Vendedor**. Si sigue fallando, avisame: MP permite pedir
+  credenciales de sandbox con el parámetro `test_token`, y habría que
+  agregarlo al código.
 - **El webhook responde 401:** revisá `MP_WEBHOOK_SECRET` y reiniciá `pnpm dev`.
 - **El pago queda Pendiente:** fijate en la consola si llegó la notificación.
   Si no llegó, revisá que el túnel esté abierto y que la URL del panel sea
