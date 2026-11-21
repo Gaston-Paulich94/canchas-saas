@@ -141,6 +141,10 @@ rechaza. Como documento usá el que indica el panel.
 - **El pago queda Pendiente:** fijate en la consola si llegó la notificación.
   Si no llegó, revisá que el túnel esté abierto y que la URL del panel sea
   exacta.
+- **`pnpm dev` (o `pnpm build`) se corta con "Your version of Next.js is
+  affected by a known security vulnerability":** es un aviso del CLI de Next
+  que aparece de a ratos mientras haya advisories sin aplicar. No es un error
+  de la app: volvé a correr el mismo comando y sigue.
 - **Pantalla en blanco o errores de recursos de Next por el túnel:** falta
   reiniciar `pnpm dev` después de cargar `APP_PUBLIC_URL`.
 
