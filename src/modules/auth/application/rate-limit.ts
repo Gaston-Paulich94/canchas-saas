@@ -22,7 +22,10 @@ import {
  *    Contrapartida conocida: un atacante puede bloquear temporalmente una
  *    cuenta; es una ventana corta y es el trade-off estándar (ASVS V2.2.1).
  *
- * Fail-closed: si el contador no se puede consultar, se deniega.
+ * Fail-closed: si el contador no se puede consultar (por ejemplo, la base no
+ * responde), se deniega igual, pero con su propio resultado ("unavailable") y
+ * su propio mensaje: decirle "demasiados intentos" a alguien que no hizo
+ * ninguno confunde, y el corte queda registrado en el log del servidor.
  */
 
 interface Limit {
@@ -36,8 +39,24 @@ export const AUTH_LIMITS = {
   registroPorIp: { max: 5, windowSeconds: 60 * 60 },
 } as const satisfies Record<string, Limit>;
 
-export const TOO_MANY_ATTEMPTS_MESSAGE =
-  "Demasiados intentos. Esperá unos minutos y volvé a intentar.";
+/** Resultado del chequeo: solo "allowed" deja seguir. */
+export type AttemptDecision = "allowed" | "limited" | "unavailable";
+
+/** Mensaje para el usuario cuando el intento NO se permite. */
+export const ATTEMPT_DENIED_MESSAGES: Record<
+  Exclude<AttemptDecision, "allowed">,
+  string
+> = {
+  limited: "Demasiados intentos. Esperá unos minutos y volvé a intentar.",
+  unavailable:
+    "No pudimos procesar el pedido en este momento. Intentá de nuevo en unos minutos.",
+};
+
+/** Registra el corte sin detalle: un error de conexión puede traer datos de la base. */
+function logUnavailable(where: string, err: unknown): void {
+  const kind = err instanceof Error ? err.name : "error";
+  console.error(`[rate-limit] ${where}: contador no disponible (${kind}); se deniega.`);
+}
 
 /**
  * HMAC de la clave lógica: la tabla nunca guarda emails ni IPs en claro, y
@@ -72,11 +91,11 @@ function maybePrune(exec: SqlExecutor): void {
 }
 
 /** ¿Se permite este intento de login? Consume el cupo de IP y de cuenta. */
-export async function isLoginAllowed(
+export async function checkLoginAttempt(
   ip: string,
   email: string,
   exec: SqlExecutor = db,
-): Promise<boolean> {
+): Promise<AttemptDecision> {
   try {
     const cuenta = email.trim().toLowerCase();
     // Se consumen ambos cupos siempre (no cortocircuitar): el conteo no debe
@@ -86,22 +105,24 @@ export async function isLoginAllowed(
       withinLimit(exec, `login:cuenta:${cuenta}`, AUTH_LIMITS.loginPorCuenta),
     ]);
     maybePrune(exec);
-    return porIp && porCuenta;
-  } catch {
-    return false;
+    return porIp && porCuenta ? "allowed" : "limited";
+  } catch (err) {
+    logUnavailable("login", err);
+    return "unavailable";
   }
 }
 
 /** ¿Se permite este intento de registro? (cupo por IP) */
-export async function isRegisterAllowed(
+export async function checkRegisterAttempt(
   ip: string,
   exec: SqlExecutor = db,
-): Promise<boolean> {
+): Promise<AttemptDecision> {
   try {
     const ok = await withinLimit(exec, `registro:ip:${ip}`, AUTH_LIMITS.registroPorIp);
     maybePrune(exec);
-    return ok;
-  } catch {
-    return false;
+    return ok ? "allowed" : "limited";
+  } catch (err) {
+    logUnavailable("registro", err);
+    return "unavailable";
   }
 }

@@ -9,9 +9,9 @@ import {
 } from "@/modules/auth/domain/schemas";
 import { registerOwner } from "@/modules/auth/application/register-owner";
 import {
-  isLoginAllowed,
-  isRegisterAllowed,
-  TOO_MANY_ATTEMPTS_MESSAGE,
+  checkLoginAttempt,
+  checkRegisterAttempt,
+  ATTEMPT_DENIED_MESSAGES,
 } from "@/modules/auth/application/rate-limit";
 import { clientIpFrom } from "@/lib/client-ip";
 
@@ -47,8 +47,9 @@ export async function registerAction(
   }
 
   const ip = clientIpFrom(await headers());
-  if (!(await isRegisterAllowed(ip))) {
-    return { error: TOO_MANY_ATTEMPTS_MESSAGE };
+  const attempt = await checkRegisterAttempt(ip);
+  if (attempt !== "allowed") {
+    return { error: ATTEMPT_DENIED_MESSAGES[attempt] };
   }
 
   try {
@@ -82,8 +83,9 @@ export async function loginAction(
   // El cupo se consume ANTES de verificar la contraseña: cada intento cuenta,
   // sea correcto o no.
   const ip = clientIpFrom(await headers());
-  if (!(await isLoginAllowed(ip, parsed.data.email))) {
-    return { error: TOO_MANY_ATTEMPTS_MESSAGE };
+  const attempt = await checkLoginAttempt(ip, parsed.data.email);
+  if (attempt !== "allowed") {
+    return { error: ATTEMPT_DENIED_MESSAGES[attempt] };
   }
 
   try {

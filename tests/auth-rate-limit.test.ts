@@ -1,10 +1,12 @@
 import { beforeAll, afterAll, beforeEach, describe, expect, it } from "vitest";
 import { setupTestDb, type TestDb } from "./helpers/postgres";
 import {
-  isLoginAllowed,
-  isRegisterAllowed,
+  checkLoginAttempt,
+  checkRegisterAttempt,
   rateLimitKeyHash,
   AUTH_LIMITS,
+  ATTEMPT_DENIED_MESSAGES,
+  type AttemptDecision,
 } from "@/modules/auth/application/rate-limit";
 import {
   consumeRateLimit,
@@ -32,64 +34,64 @@ describe("Rate-limit de autenticación (anti fuerza bruta)", () => {
 
   it("bloquea la fuerza bruta sobre UNA cuenta aunque cambie la IP", async () => {
     const { max } = AUTH_LIMITS.loginPorCuenta;
-    const results: boolean[] = [];
+    const results: AttemptDecision[] = [];
     for (let i = 0; i < max + 1; i++) {
       // Una IP distinta por intento: el límite por IP no interviene.
-      results.push(await isLoginAllowed(`10.0.0.${i}`, "victima@demo.test", db.appDb));
+      results.push(await checkLoginAttempt(`10.0.0.${i}`, "victima@demo.test", db.appDb));
     }
-    expect(results.slice(0, max).every(Boolean)).toBe(true);
-    expect(results[max]).toBe(false);
+    expect(results.slice(0, max).every((r) => r === "allowed")).toBe(true);
+    expect(results[max]).toBe("limited");
   });
 
   it("el límite por cuenta no bloquea a OTRAS cuentas", async () => {
     const { max } = AUTH_LIMITS.loginPorCuenta;
     for (let i = 0; i < max + 1; i++) {
-      await isLoginAllowed(`10.0.1.${i}`, "victima@demo.test", db.appDb);
+      await checkLoginAttempt(`10.0.1.${i}`, "victima@demo.test", db.appDb);
     }
-    expect(await isLoginAllowed("10.0.2.1", "otra@demo.test", db.appDb)).toBe(true);
+    expect(await checkLoginAttempt("10.0.2.1", "otra@demo.test", db.appDb)).toBe("allowed");
   });
 
   it("bloquea a UNA IP que prueba muchas cuentas", async () => {
     const { max } = AUTH_LIMITS.loginPorIp;
-    const results: boolean[] = [];
+    const results: AttemptDecision[] = [];
     for (let i = 0; i < max + 1; i++) {
-      results.push(await isLoginAllowed("203.0.113.9", `cuenta${i}@demo.test`, db.appDb));
+      results.push(await checkLoginAttempt("203.0.113.9", `cuenta${i}@demo.test`, db.appDb));
     }
-    expect(results.slice(0, max).every(Boolean)).toBe(true);
-    expect(results[max]).toBe(false);
+    expect(results.slice(0, max).every((r) => r === "allowed")).toBe(true);
+    expect(results[max]).toBe("limited");
   });
 
   it("normaliza el email: mayúsculas y espacios no esquivan el límite", async () => {
     const { max } = AUTH_LIMITS.loginPorCuenta;
     for (let i = 0; i < max; i++) {
       const variante = i % 2 === 0 ? "Victima@Demo.test" : "  victima@demo.test ";
-      await isLoginAllowed(`10.0.3.${i}`, variante, db.appDb);
+      await checkLoginAttempt(`10.0.3.${i}`, variante, db.appDb);
     }
-    expect(await isLoginAllowed("10.0.3.99", "VICTIMA@DEMO.TEST", db.appDb)).toBe(false);
+    expect(await checkLoginAttempt("10.0.3.99", "VICTIMA@DEMO.TEST", db.appDb)).toBe("limited");
   });
 
   it("cuando vence la ventana, la cuenta se desbloquea", async () => {
     const { max, windowSeconds } = AUTH_LIMITS.loginPorCuenta;
     for (let i = 0; i < max + 1; i++) {
-      await isLoginAllowed(`10.0.4.${i}`, "victima@demo.test", db.appDb);
+      await checkLoginAttempt(`10.0.4.${i}`, "victima@demo.test", db.appDb);
     }
-    expect(await isLoginAllowed("10.0.4.200", "victima@demo.test", db.appDb)).toBe(false);
+    expect(await checkLoginAttempt("10.0.4.200", "victima@demo.test", db.appDb)).toBe("limited");
 
     // Simula el paso del tiempo: ventanas iniciadas antes del período.
     await db.adminSql`
       update auth_rate_limits
       set window_start = now() - make_interval(secs => ${windowSeconds + 60})`;
-    expect(await isLoginAllowed("10.0.4.201", "victima@demo.test", db.appDb)).toBe(true);
+    expect(await checkLoginAttempt("10.0.4.201", "victima@demo.test", db.appDb)).toBe("allowed");
   });
 
   it("limita la creación de cuentas por IP", async () => {
     const { max } = AUTH_LIMITS.registroPorIp;
-    const results: boolean[] = [];
+    const results: AttemptDecision[] = [];
     for (let i = 0; i < max + 1; i++) {
-      results.push(await isRegisterAllowed("198.51.100.4", db.appDb));
+      results.push(await checkRegisterAttempt("198.51.100.4", db.appDb));
     }
-    expect(results.slice(0, max).every(Boolean)).toBe(true);
-    expect(results[max]).toBe(false);
+    expect(results.slice(0, max).every((r) => r === "allowed")).toBe(true);
+    expect(results[max]).toBe("limited");
   });
 
   it("es atómico: 30 intentos concurrentes cuentan exactamente 30", async () => {
@@ -103,7 +105,7 @@ describe("Rate-limit de autenticación (anti fuerza bruta)", () => {
   });
 
   it("no guarda emails ni IPs en claro (solo HMAC)", async () => {
-    await isLoginAllowed("192.0.2.77", "privado@demo.test", db.appDb);
+    await checkLoginAttempt("192.0.2.77", "privado@demo.test", db.appDb);
     const rows = await db.adminSql`select key_hash from auth_rate_limits`;
     expect(rows.length).toBeGreaterThan(0);
     for (const r of rows) {
@@ -114,11 +116,17 @@ describe("Rate-limit de autenticación (anti fuerza bruta)", () => {
     }
   });
 
-  it("fail-closed: si el contador falla, se deniega", async () => {
+  it("fail-closed: si el contador falla, se deniega como 'unavailable', no como 'limited'", async () => {
     const roto: SqlExecutor = {
       execute: (() => Promise.reject(new Error("DB caída"))) as unknown as SqlExecutor["execute"],
     };
-    expect(await isLoginAllowed("192.0.2.1", "x@demo.test", roto)).toBe(false);
-    expect(await isRegisterAllowed("192.0.2.1", roto)).toBe(false);
+    expect(await checkLoginAttempt("192.0.2.1", "x@demo.test", roto)).toBe("unavailable");
+    expect(await checkRegisterAttempt("192.0.2.1", roto)).toBe("unavailable");
+  });
+
+  it("cada denegación tiene su propio mensaje: la base caída no dice 'demasiados intentos'", () => {
+    expect(ATTEMPT_DENIED_MESSAGES.limited).toMatch(/Demasiados intentos/);
+    expect(ATTEMPT_DENIED_MESSAGES.unavailable).not.toMatch(/Demasiados intentos/);
+    expect(ATTEMPT_DENIED_MESSAGES.unavailable).toMatch(/en este momento/);
   });
 });
