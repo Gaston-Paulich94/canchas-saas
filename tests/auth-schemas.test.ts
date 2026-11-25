@@ -4,11 +4,19 @@ import {
   loginSchema,
 } from "@/modules/auth/domain/schemas";
 
+// Fixtures ficticios: solo existen para ejercitar las reglas de Zod.
+// Válida para el registro: 12 a 128 caracteres.
+const VALID_TEST_PASSWORD = "fake-test-password-123";
+// Inválida para el registro: menos de 12 caracteres.
+const SHORT_TEST_PASSWORD = "fake-pw1";
+// Cualquier valor no vacío alcanza para el login.
+const LOGIN_TEST_PASSWORD = "fake-login-pw";
+
 const validRegister = {
   complejoName: "Pádel Center",
   ownerName: "Gastón",
   email: "dueno@complejo.com",
-  password: "contraseñasegura123",
+  password: VALID_TEST_PASSWORD,
 };
 
 describe("Esquemas de auth (validación en el borde)", () => {
@@ -29,7 +37,7 @@ describe("Esquemas de auth (validación en el borde)", () => {
   it("rechaza contraseñas de menos de 12 caracteres", () => {
     const res = registerOwnerSchema.safeParse({
       ...validRegister,
-      password: "corta123",
+      password: SHORT_TEST_PASSWORD,
     });
     expect(res.success).toBe(false);
   });
@@ -46,7 +54,7 @@ describe("Esquemas de auth (validación en el borde)", () => {
   it("loginSchema también rechaza campos extra", () => {
     const res = loginSchema.safeParse({
       email: "x@y.com",
-      password: "algo",
+      password: LOGIN_TEST_PASSWORD,
       isAdmin: true,
     });
     expect(res.success).toBe(false);

@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import path from "node:path";
 import {
   PostgreSqlContainer,
@@ -24,23 +25,28 @@ export interface TestDb {
 }
 
 const APP_ROLE = "app_user";
-const APP_PASSWORD = "app_pw_test";
+
+/** Password efímero por corrida (hex: URL-safe). El contenedor muere al final. */
+function ephemeralPassword(): string {
+  return randomBytes(16).toString("hex");
+}
 
 export async function setupTestDb(): Promise<TestDb> {
+  const appPassword = ephemeralPassword();
   const container = await new PostgreSqlContainer("postgres:17.2-alpine")
     .withDatabase("canchas")
     .withUsername("postgres")
-    .withPassword("postgres")
+    .withPassword(ephemeralPassword())
     .start();
 
   const adminUrl = container.getConnectionUri();
   const u = new URL(adminUrl);
-  const appUrl = `postgres://${APP_ROLE}:${APP_PASSWORD}@${u.hostname}:${u.port}${u.pathname}`;
+  const appUrl = `postgres://${APP_ROLE}:${appPassword}@${u.hostname}:${u.port}${u.pathname}`;
 
   await runMigrations({
     adminUrl,
     appRole: APP_ROLE,
-    appPassword: APP_PASSWORD,
+    appPassword,
     migrationsFolder: path.resolve(process.cwd(), "drizzle"),
   });
 
