@@ -5,8 +5,9 @@
 # Flujo: db (Postgres) → migrate (one-shot: crea rol app_user + tablas + RLS)
 #        → app (Next.js standalone, corre como app_user).
 #
-# Secretos: se toman de .env (BETTER_AUTH_SECRET, MP_TOKEN_ENC_KEY). NUNCA
-# hardcodear valores reales acá.
+# Secretos: se toman de .env (POSTGRES_PASSWORD, APP_DB_PASSWORD,
+# BETTER_AUTH_SECRET, MP_TOKEN_ENC_KEY, ...). NUNCA hardcodear valores acá.
+# Los passwords de DB se insertan tal cual en las URLs: usá valores URL-safe.
 # ─────────────────────────────────────────────────────────────────────────────
 services:
   db:
@@ -14,7 +15,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD es obligatoria en .env}
       POSTGRES_DB: canchas
     volumes:
       - db_data:/var/lib/postgresql/data
@@ -35,9 +36,9 @@ services:
       target: migrator
     environment:
       # admin (DDL/roles/RLS)
-      DATABASE_URL: postgres://postgres:postgres@db:5432/canchas
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD es obligatoria en .env}@db:5432/canchas
       # runtime (lo crea esta misma migración)
-      APP_DATABASE_URL: postgres://app_user:app_user_password@db:5432/canchas
+      APP_DATABASE_URL: postgres://app_user:${APP_DB_PASSWORD:?APP_DB_PASSWORD es obligatoria en .env}@db:5432/canchas
     depends_on:
       db:
         condition: service_healthy
@@ -53,8 +54,8 @@ services:
       NODE_ENV: production
       # En runtime la app SOLO usa APP_DATABASE_URL (rol app_user, respeta RLS).
       # DATABASE_URL se setea porque env.ts lo valida, pero la app no lo usa.
-      DATABASE_URL: postgres://postgres:postgres@db:5432/canchas
-      APP_DATABASE_URL: postgres://app_user:app_user_password@db:5432/canchas
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD es obligatoria en .env}@db:5432/canchas
+      APP_DATABASE_URL: postgres://app_user:${APP_DB_PASSWORD:?APP_DB_PASSWORD es obligatoria en .env}@db:5432/canchas
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET en .env}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
       MP_TOKEN_ENC_KEY: ${MP_TOKEN_ENC_KEY:?set MP_TOKEN_ENC_KEY en .env}
